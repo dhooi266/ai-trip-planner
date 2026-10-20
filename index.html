@@ -1691,7 +1691,8 @@ function voiceInner(){
   if (vBusy) h += '<p class="vmsg busy">⏳ '+t(_("识别、翻译中…","Listening back and translating…"))+'</p>';
   h += '<div class="vset"><span>'+(elKey?"🟢 ElevenLabs":"⚪ "+t(_("手机自带语音","Built-in phone voice")))+'</span>'+(vlog.length?'<button id="vClear">'+t(_("清空","Clear"))+'</button>':'')+'<button id="vSetBtn">⚙ '+t(_("设置","Settings"))+'</button></div>';
   if (vShowSet) {
-    h += onServer(elKey) ? '<div class="vform"><p class="vhint">🔑 '+t(_("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here."))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
+    if (TP && !onServer(elKey) && !TP.admin) h += '<div class="vform"><p class="vhint">🔑 '+t(_("语音翻译由主办方提供。主办方还没设置好，暂时使用手机自带语音。","Voice translation is provided by the organiser. It isn't set up yet, so your phone's built-in voice is used for now."))+'</p>';
+    else h += onServer(elKey) ? '<div class="vform"><p class="vhint">🔑 '+t(_("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here."))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
     if (elKey) {
       if (!elVoices) h += '<p class="vhint">'+t(_("正在读取你的声音列表…","Loading your voices…"))+'</p>';
       else {
@@ -1712,7 +1713,8 @@ function voiceInner(){
       }
     }
     if (elKey && !onServer(elKey)) h += '<div class="vsend"><button id="elSend">📱 '+t(_("传到手机（扫二维码）","Send to phone (QR code)"))+'</button>'+(vQR?'<div id="elQR" class="vqr"></div><p class="vhint">'+t(_("用手机相机扫描，打开后点「导入」，这部手机就设置好了。二维码里有你的key，别截图或分享给别人。","Scan with the phone camera, open the link and tap Import; that phone is then set up. The code contains your key, so don\'t screenshot or share it."))+'</p><div class="vrow"><button id="elCopyLink">🔗 '+t(_("复制链接","Copy link"))+'</button><button id="elHideQR">'+t(_("隐藏","Hide"))+'</button></div>':'')+'</div>';
-    h += '<p class="vhint">🔒 '+t(_("Key只保存在这部手机的浏览器里，不会上传到网页代码。每部手机设置一次。","The key stays in this phone's browser only, never in the page code. Set it once per phone."))+'</p></div>';
+    if (TP && (!TP.admin || onServer(elKey))) h += '</div>';
+    else h += '<p class="vhint">🔒 '+(TP ? t(_("管理员：保存后Key放在服务器上，所有用户自动使用，不会存在手机里。","Admin: Save puts the key on the server for every account; it is never stored on a phone.")) : t(_("Key只保存在这部手机的浏览器里，不会上传到网页代码。每部手机设置一次。","The key stays in this phone's browser only, never in the page code. Set it once per phone.")))+'</p></div>';
   }
   return h;
 }
@@ -1725,7 +1727,13 @@ function paintVoice(){
   box.querySelectorAll("button[data-vr]").forEach(b => b.onclick = () => { unlockAudio(); const x = vlog[+b.dataset.vr], o = (x.outs || [{l:x.to, text:x.out}])[+b.dataset.vk || 0]; elSpeak(o.text, o.l).catch(e => { vErr(e); paintVoice(); }); });
   const c = $("#vClear"); if (c) c.onclick = () => { vlog = []; vMsg = ""; paintVoice(); };
   $("#vSetBtn").onclick = () => { vShowSet = !vShowSet; if (vShowSet && elKey && !elVoices) elLoadVoices(); paintVoice(); };
-  const sv = $("#elSave"); if (sv) sv.onclick = () => { const k = ($("#elKeyIn").value || "").trim(); if (!k) return; elKey = k; store.set("elkey", k); elVoices = null; vMsg = ""; elLoadVoices(); paintVoice(); };
+  const sv = $("#elSave"); if (sv) sv.onclick = async () => { const k = ($("#elKeyIn").value || "").trim(); if (!k) return;
+    if (TP && TP.admin) { vMsg = "⏳ "+t(_("保存到服务器…","Saving to the server…")); paintVoice();
+      try { const r = await fetch("/api/admin/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({eleven:k})});
+        if (!r.ok) throw new Error("HTTP "+r.status); vMsg = "✓ "+t(_("已保存到服务器，所有用户都能用了。正在重新载入…","Saved on the server for every account. Reloading…")); paintVoice(); setTimeout(() => location.reload(), 900);
+      } catch(e) { vMsg = t(_("保存失败：","Couldn't save: "))+e.message; paintVoice(); }
+      return; }
+    elKey = k; store.set("elkey", k); elVoices = null; vMsg = ""; elLoadVoices(); paintVoice(); };
   const dl = $("#elDel"); if (dl) dl.onclick = () => { elKey = ""; elVoices = null; try { localStorage.removeItem(skey("elkey")); } catch(e) {} paintVoice(); };
   box.querySelectorAll("select[data-vl]").forEach(s => s.onchange = () => { elPref[s.dataset.vl] = s.value; store.set("elv", elPref); });
   box.querySelectorAll("input[data-vid]").forEach(i => i.onchange = () => { const v = i.value.trim(); if (v) elPref[i.dataset.vid] = v; else delete elPref[i.dataset.vid]; store.set("elv", elPref); });
