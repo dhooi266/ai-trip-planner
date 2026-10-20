@@ -4,7 +4,7 @@
    - Google Fonts, Wikimedia stop photos, cdnjs: stale-while-revalidate in a runtime cache.
    - Everything else (Google Maps, translation, ElevenLabs) goes straight to the network.
    Bump VERSION whenever the CORE list changes. */
-const VERSION = "tripai-v6", RUNTIME = "tripai-runtime";
+const VERSION = "tripai-v7", RUNTIME = "tripai-runtime";
 const CORE = ["./", "./index.html", "./manifest.webmanifest",
   "./img/icons/icon-180.png", "./img/icons/icon-192.png", "./img/icons/icon-512.png", "./img/icons/icon-32.png",
   "./img/hero-portrait.webp", "./img/hero-wide.webp"]

@@ -155,7 +155,7 @@ async function appPage(res, u){
 
 /* ---------- AI relay with per-user limits ---------- */
 async function relayOpenAI(req, res, u){
-  const key = OPENAI(); if (!key) return fail(res, 503, "OpenAI key not set on the server");
+  const key = OPENAI(); if (!key) return fail(res, 503, "AI 服务还没开通，请联系主办方 · The AI service is not switched on yet; please contact the organiser");
   let body; try { body = await readBody(req, 40 * 1024 * 1024); } catch(e) { return fail(res, 413, "request too large"); }
   const sub = req.url.replace(/^\/api\/openai/, "");
   if (!u.admin) {
@@ -174,7 +174,7 @@ async function relayOpenAI(req, res, u){
   return pipe(res, "https://api.openai.com" + sub, req.method, {Authorization:"Bearer " + key, "Content-Type":req.headers["content-type"] || "application/json"}, body);
 }
 async function relayEleven(req, res, u){
-  const key = ELEVEN(); if (!key) return fail(res, 503, "ElevenLabs key not set on the server");
+  const key = ELEVEN(); if (!key) return fail(res, 503, "AI 语音还没开通 · The AI voice is not switched on yet");
   const sub = req.url.replace(/^\/api\/eleven/, "");
   if (!/^\/v[12]\/(voices|text-to-speech\/|speech-to-text)/.test(sub)) return fail(res, 403, "not allowed");
   let body; if (!["GET","HEAD"].includes(req.method)) { try { body = await readBody(req, 25 * 1024 * 1024); } catch(e) { return fail(res, 413, "request too large"); } }

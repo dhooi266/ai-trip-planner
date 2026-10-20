@@ -716,6 +716,7 @@ if (TP) (function(){
   window.tpFlush = flush; if (Object.keys(q).length) setTimeout(flush, 800);
 })();
 const _ = (z,e) => ({z,e});
+const TPK = TP && !TP.admin ? _("AI服务暂时用不了，请稍后再试，或联系主办方。","The AI service isn't available right now; try again later or contact the organiser.") : null;
 let lang = "zh";
 try { const s = localStorage.getItem("tripai:lang") || localStorage.getItem("kanto27:lang"); if (s) lang = JSON.parse(s); } catch(e) {}
 if (lang !== "zh" && lang !== "en") lang = "zh";
@@ -1747,11 +1748,11 @@ function vErr(e){
   const m = e && e.message;
   vMsg = m==="autoplay" ? t(_("iPhone没有自动播放声音，请点气泡右边的🔊听翻译。","iPhone blocked auto-play; tap 🔊 on the bubble to hear it.")) :
          m && m.startsWith("tts:") ? t(_("ElevenLabs声音播放失败：","ElevenLabs voice failed: "))+m.slice(4)+t(_("（检查声音ID或额度）"," (check the voice ID or credits)")) :
-         m==="key" ? t(_("ElevenLabs key无效或额度不足，请在设置里检查。","ElevenLabs key rejected or out of credits; check settings.")) :
+         m==="key" ? t(TPK || _("ElevenLabs key无效或额度不足，请在设置里检查。","ElevenLabs key rejected or out of credits; check settings.")) :
          m==="empty" ? t(_("没听清楚，请再说一次。","Didn't catch that, please try again.")) :
          m==="mic" ? t(_("无法使用麦克风，请在浏览器允许麦克风权限。","Microphone blocked; allow mic access in your browser.")) :
          m==="denied" ? t(_("麦克风权限被拒绝：请到手机 设置 → Safari（或你用的浏览器）→ 麦克风，允许本网站，然后刷新页面。","Microphone permission denied: allow the mic for this site in your phone's browser settings, then reload.")) :
-         m==="nosvc" ? t(_("手机自带的语音识别用不了（iPhone请开启 设置 → 通用 → 键盘 → 启用听写）。更稳定的做法：在下面⚙设置里加上ElevenLabs key。","The phone's built-in speech recognition isn't available (iPhone: Settings → General → Keyboard → Enable Dictation). More reliable: add your ElevenLabs key in ⚙ Settings below.")) :
+         m==="nosvc" ? t(TP ? _("手机自带的语音识别用不了（iPhone请开启 设置 → 通用 → 键盘 → 启用听写）。","The phone's built-in speech recognition isn't available (iPhone: Settings → General → Keyboard → Enable Dictation).") : _("手机自带的语音识别用不了（iPhone请开启 设置 → 通用 → 键盘 → 启用听写）。更稳定的做法：在下面⚙设置里加上ElevenLabs key。","The phone's built-in speech recognition isn't available (iPhone: Settings → General → Keyboard → Enable Dictation). More reliable: add your ElevenLabs key in ⚙ Settings below.")) :
          m==="nosound" ? t(_("没有听到声音。按下按钮后再开口说，说完再按一次。","No speech heard. Tap the button, then speak, then tap again when done.")) :
          m==="norec" ? t(_("这个浏览器不能录音，请用Safari或Chrome打开本网页。","This browser can't record audio; open the page in Safari or Chrome.")) :
          m==="net" ? t(_("语音识别需要网络连接。","Speech recognition needs an internet connection.")) :
@@ -1841,8 +1842,8 @@ function voiceInner(){
   if (vBusy) h += '<p class="vmsg busy">⏳ '+t(_("识别、翻译中…","Listening back and translating…"))+'</p>';
   h += '<div class="vset"><span>'+(elKey?"🟢 ElevenLabs":"⚪ "+t(_("手机自带语音","Built-in phone voice")))+'</span>'+(vlog.length?'<button id="vClear">'+t(_("清空","Clear"))+'</button>':'')+'<button id="vSetBtn">⚙ '+t(_("设置","Settings"))+'</button></div>';
   if (vShowSet) {
-    if (TP && !onServer(elKey) && !TP.admin) h += '<div class="vform"><p class="vhint">🔑 '+t(_("语音翻译由主办方提供。主办方还没设置好，暂时使用手机自带语音。","Voice translation is provided by the organiser. It isn't set up yet, so your phone's built-in voice is used for now."))+'</p>';
-    else h += onServer(elKey) ? '<div class="vform"><p class="vhint">🔑 '+t(_("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here."))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
+    if (TP && !onServer(elKey) && !TP.admin) h += '<div class="vform"><p class="vhint">🎙 '+t(_("AI真人语音还没开通，暂时使用手机自带语音。","The natural AI voice isn't switched on yet, so your phone's built-in voice is used for now."))+'</p>';
+    else h += onServer(elKey) ? '<div class="vform"><p class="vhint">'+(TP && !TP.admin ? '🎙 '+t(_("AI真人语音已开通，不用任何设置。","The natural AI voice is on; nothing to set up.")) : '🔑 '+t(_("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here.")))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
     if (elKey) {
       if (!elVoices) h += '<p class="vhint">'+t(_("正在读取你的声音列表…","Loading your voices…"))+'</p>';
       else {
@@ -1850,7 +1851,7 @@ function voiceInner(){
         const langs = [TLC].concat(vLang==="both" ? ["zh","en"] : [vLang]).map(l => [l, VLAB[l]]);
         if (!elVoices.length) {
           const c = elVoiceErr && elVoiceErr.code;
-          h += '<p class="vwarn">⚠ '+(c==="missing_permissions" ? t(_("这个key没有「Voices 读取」权限，所以读不到声音列表。到 ElevenLabs → Developers → API Keys → 编辑这个key，把 Voices 设为 Read，然后点「重新读取」。","This key has no Voices read permission, so the list can't load. In ElevenLabs → Developers → API Keys, edit the key, set Voices to Read, then tap Reload.")) :
+          h += '<p class="vwarn">⚠ '+(TP && !TP.admin && c !== "network" ? t(_("暂时读不到声音列表，会用默认声音。","The voice list isn't available right now; the default voice is used.")) : c==="missing_permissions" ? t(_("这个key没有「Voices 读取」权限，所以读不到声音列表。到 ElevenLabs → Developers → API Keys → 编辑这个key，把 Voices 设为 Read，然后点「重新读取」。","This key has no Voices read permission, so the list can't load. In ElevenLabs → Developers → API Keys, edit the key, set Voices to Read, then tap Reload.")) :
             c==="invalid_api_key" ? t(_("ElevenLabs说这个key无效，请重新复制整串key再保存。","ElevenLabs says this key is invalid; copy the whole key again and save.")) :
             c==="network" ? t(_("连不上ElevenLabs，请检查网络。","Can't reach ElevenLabs; check the connection.")) :
             t(_("读取声音列表失败","Couldn't load the voice list"))+(elVoiceErr ? " ("+elVoiceErr.status+(elVoiceErr.msg?": "+esc(elVoiceErr.msg):"")+")" : ""))+'</p><div class="vrow"><button id="elReload">🔄 '+t(_("重新读取","Reload"))+'</button></div>';
@@ -2093,7 +2094,7 @@ async function bkExtract(){
     bkFound = ((out && JSON.parse(out.text).bookings) || []).map(cleanBK);
     if (!bkFound.length) bkMsg = t(_("没有找到预订资料，换一张更清楚的截图，或贴上邮件全文试试。","No booking found; try a clearer screenshot or the full email text."));
   } catch(e) {
-    bkMsg = e.message === "key" ? t(_("OpenAI key无效，请重新粘贴。","OpenAI key rejected; paste it again.")) : t(_("识别失败：","Couldn't read it: "))+e.message;
+    bkMsg = e.message === "key" ? t(TPK || _("OpenAI key无效，请重新粘贴。","OpenAI key rejected; paste it again.")) : t(_("识别失败：","Couldn't read it: "))+e.message;
   }
   bkBusy = false; paintBookings();
 }
@@ -2226,7 +2227,7 @@ async function xExtract(){
     xFound = list.map((x, i) => ({merchant:x.merchant, merchant_ja:x.merchant_ja||"", date: TRIP_DAYS.includes(x.date) ? x.date : todayTrip(), time:x.time||"", amount:+x.total||0,
       currency:(x.currency||META.cur.code).toUpperCase(), cat: XCAT[x.category] ? x.category : "other", pay:x.payment||"", items:(x.items||[]).slice(0,12), photo: thumbs[i] || null, src:"receipt"}));
     if (!xFound.length) xMsg = t(_("看不出是收据，换一张更清楚、正面拍的照片试试。","That doesn't look like a receipt; try a clearer, straight-on photo."));
-  } catch(e) { xMsg = e.message === "key" ? t(_("OpenAI key无效，请重新粘贴。","OpenAI key rejected; paste it again.")) : t(_("识别失败：","Couldn't read it: "))+e.message; }
+  } catch(e) { xMsg = e.message === "key" ? t(TPK || _("OpenAI key无效，请重新粘贴。","OpenAI key rejected; paste it again.")) : t(_("识别失败：","Couldn't read it: "))+e.message; }
   xBusy = false; paintExp();
 }
 function xTotals(list){ const by = {}, cats = {}; let sum = 0, other = 0;
@@ -2617,7 +2618,7 @@ function accountHTML(){
   const use = (a, b, l) => '<span class="kst on">'+esc(t(l))+' '+(a||0)+(TP.admin ? '' : '/'+(b==null?"–":b))+'</span>';
   let h = '<div class="tkeys"><div class="tkhead"><b>👤 '+esc(TP.name)+' <small style="font-weight:400;color:var(--ink-3)">'+esc(TP.email)+'</small></b>';
   h += use(n.trips, L.trips, _("今日新行程","New trips today"))+use(n.redos, L.redos, _("重做","Redos"))+use(n.scans, L.scans, _("识别","Scans"))+'</div><div class="tkbody">';
-  h += '<p class="tsnote">'+t(_("行程、勾选、预订和记账都保存在你的账户里，用任何手机或电脑登录都能看到。AI Key由服务器提供，不用自己输入。","Your trips, ticks, bookings and expenses are saved to your account, so they appear on any phone or computer you log in on. AI keys come from the server; nothing to enter."))+'</p>';
+  h += '<p class="tsnote">'+t(_("行程、勾选、预订和记账都保存在你的账户里，用任何手机或电脑登录都能看到。所有AI功能都已准备好，不用任何设置。","Your trips, ticks, bookings and expenses are saved to your account, so they appear on any phone or computer you log in on. All AI features are ready; nothing to set up."))+'</p>';
   h += '<div class="tsbtns" style="flex-wrap:wrap;justify-content:flex-start"><button id="acPw">🔒 '+t(_("改密码","Change password"))+'</button>'+(TP.admin ? '<button id="acAdmin">⚙ '+t(_("管理后台","Admin"))+'</button>' : '')+'<button id="acOut">↩ '+t(_("登出","Log out"))+'</button></div>';
   /* admins can put the AI keys on the server from here (used by every account; never stored on the phone) */
   if (TP.admin) h += '<label class="tkin">🔑 '+t(_("服务器上的API Key（所有用户共用）","API keys on the server (used by every account)"))+
@@ -2689,7 +2690,7 @@ async function startGen(){
     tsDraft = null; openTrip(rec.id);
   } catch(e) {
     clearInterval(tick); gen.busy = false;
-    gen.err = e.name === "AbortError" ? t(_("已取消。","Cancelled.")) : e.message === "key" ? t(_("OpenAI key无效，请在AI设置里重新输入。","OpenAI key rejected; enter it again.")) : t(_("生成失败：","Couldn't finish: "))+e.message;
+    gen.err = e.name === "AbortError" ? t(_("已取消。","Cancelled.")) : e.message === "key" ? t(TPK || _("OpenAI key无效，请在AI设置里重新输入。","OpenAI key rejected; enter it again.")) : t(_("生成失败：","Couldn't finish: "))+e.message;
     if (e.message === "key") { aiKey = ""; try { localStorage.removeItem(skey("aikey")); } catch(e2) {} }
     paintTrips();
   }
@@ -2713,7 +2714,7 @@ function wireRedo(){
       const R = lsRaw("trip:"+TRIP_ID); R.src.days[cur] = await genDay(R.input, R.src.outline, cur, note, undefined, "redo");
       const keep = R.img; R.img = await resolvePhotos(R.src); if (keep && keep.hero && !R.img.hero) R.img.hero = keep.hero;
       saveTripRec(R); store.set("done-"+cur, {}); try { if (window.tpFlush) await window.tpFlush(); } catch(e) {} location.reload();
-    } catch(e) { redo.busy = false; redo.msg = e.message === "key" ? t(_("OpenAI key无效。","OpenAI key rejected.")) : t(_("失败：","Failed: "))+e.message; paint(); }
+    } catch(e) { redo.busy = false; redo.msg = e.message === "key" ? t(TPK || _("OpenAI key无效。","OpenAI key rejected.")) : t(_("失败：","Failed: "))+e.message; paint(); }
   };
 }
 
@@ -2803,7 +2804,7 @@ function showInstallGuide(){
     ["⬆️", _("点「分享」","Tap “Share”"), null],
     ["➕", _("往下滑，点「添加到主屏幕」","Scroll down and tap “Add to Home Screen”"), _("找不到就点最下面的「编辑操作」把它加进来","Not listed? Tap “Edit Actions” at the bottom to add it")],
     ["✅", _("打开「作为网页App打开」，再点右上角「添加」","Keep “Open as Web App” on, then tap “Add”"), null],
-    ["✈️", _("回到主屏幕，点纸飞机图标打开","Go to the Home Screen and open the paper-plane icon"), _("在App里重新设置一次ElevenLabs key（App和Safari分开保存）","Set your ElevenLabs key once more inside the app (it is stored separately from Safari)")]
+    ["✈️", _("回到主屏幕，点纸飞机图标打开","Go to the Home Screen and open the paper-plane icon"), (TP ? _("第一次打开时登录一次（App和Safari分开保存）","Log in once the first time you open it (it is kept separately from Safari)") : _("在App里重新设置一次ElevenLabs key（App和Safari分开保存）","Set your ElevenLabs key once more inside the app (it is stored separately from Safari)"))]
   ];
   let g = $("#instguide");
   if (!g) { g = document.createElement("div"); g.id = "instguide"; g.setAttribute("role","dialog"); g.setAttribute("aria-modal","true"); document.body.appendChild(g); }
