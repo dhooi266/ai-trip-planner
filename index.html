@@ -657,6 +657,43 @@ body.sheet-open{overflow:hidden}
 </div></nav>
 
 <script>
+/* ---- Accounts (Railway server only; window.__TP is inlined by server.js). The account's saved app data is written
+   into localStorage before the app starts, and every later change to a synced tripai: key is sent back
+   (/api/state, debounced; unsent changes wait in tripai:__pending and survive reloads and offline use).
+   tripai:__rev = the server revision this device has, so an older cached page never overwrites newer data. ---- */
+const TP = window.__TP || null;
+const DEVICE_KEYS = ["tripai:aikey","tripai:elkey","tripai:warmed","tripai:instdismiss","tripai:__pending","tripai:__uid","tripai:__rev"];
+const syncedKey = k => typeof k === "string" && k.startsWith("tripai:") && !DEVICE_KEYS.includes(k);
+if (TP) (function(){
+  const L = localStorage, SP = Storage.prototype, oSet = SP.setItem, oRem = SP.removeItem;
+  let q = {};
+  try {
+    if (L.getItem("tripai:__uid") !== TP.uid) { Object.keys(L).filter(k => k.startsWith("tripai:")).forEach(k => L.removeItem(k)); L.setItem("tripai:__uid", TP.uid); }
+    q = JSON.parse(L.getItem("tripai:__pending") || "{}") || {};
+    if (TP.rev >= (+L.getItem("tripai:__rev") || 0)) {
+      Object.keys(L).filter(syncedKey).forEach(k => { if (!(k in TP.state) && !(k in q)) L.removeItem(k); });
+      for (const k in TP.state) if (!(k in q)) L.setItem(k, TP.state[k]);
+      L.setItem("tripai:__rev", String(TP.rev));
+    }
+    for (const k in q) { if (q[k] === null) L.removeItem(k); else L.setItem(k, q[k]); }
+  } catch(e) {}
+  let timer = null, busy = false;
+  const savePend = () => { try { oSet.call(L, "tripai:__pending", JSON.stringify(q)); } catch(e) {} };
+  async function flush(){
+    clearTimeout(timer); timer = null; if (busy || !Object.keys(q).length) return; busy = true;
+    const items = Object.assign({}, q), body = JSON.stringify({items});
+    try { const r = await fetch("/api/state", {method:"POST", headers:{"Content-Type":"application/json"}, body, keepalive:body.length < 60000});
+      if (r.ok) { const j = await r.json(); for (const k in items) if (q[k] === items[k]) delete q[k]; savePend(); oSet.call(L, "tripai:__rev", String(j.rev)); }
+    } catch(e) {}
+    busy = false; if (Object.keys(q).length && navigator.onLine) timer = setTimeout(flush, 5000);
+  }
+  const mark = (k, v) => { q[k] = v; savePend(); clearTimeout(timer); timer = setTimeout(flush, 1200); };
+  SP.setItem = function(k, v){ oSet.call(this, k, v); if (this === L && syncedKey(k)) mark(k, String(v)); };
+  SP.removeItem = function(k){ oRem.call(this, k); if (this === L && syncedKey(k)) mark(k, null); };
+  addEventListener("online", flush); addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
+  window.tpFlush = flush; if (Object.keys(q).length) setTimeout(flush, 800);
+})();
 const _ = (z,e) => ({z,e});
 let lang = "zh";
 try { const s = localStorage.getItem("tripai:lang") || localStorage.getItem("kanto27:lang"); if (s) lang = JSON.parse(s); } catch(e) {}
@@ -1468,7 +1505,7 @@ async function translate(){
 /* ---- Voice translator: ElevenLabs Scribe (speech-to-text) → MyMemory → ElevenLabs TTS.
    The ElevenLabs key is typed in by the user and kept only in this browser (kanto27:elkey), never in the page source.
    Without a key it falls back to the browser's own speech recognition and voices. ---- */
-const EL = "https://api.elevenlabs.io/v1", EL_STT = "scribe_v2", EL_TTS = ["eleven_v4_turbo","eleven_flash_v2_5"], EL_DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM";
+let EL = "https://api.elevenlabs.io/v1"; const EL_STT = "scribe_v2", EL_TTS = ["eleven_v4_turbo","eleven_flash_v2_5"], EL_DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM";
 let vLive = "", elKey = store.get("elkey") || "", elVoices = null, elPref = store.get("elv") || {}, vlog = [], vrec = null, vBusy = false, vMsg = "", vShowSet = false, actx = null;
 let vLang = ["zh","en","both"].includes(store.get("vlang")) ? store.get("vlang") : (lang==="en" ? "en" : "zh");
 const myL = () => vLang;
@@ -1650,7 +1687,7 @@ function voiceInner(){
   if (vBusy) h += '<p class="vmsg busy">⏳ '+t(_("识别、翻译中…","Listening back and translating…"))+'</p>';
   h += '<div class="vset"><span>'+(elKey?"🟢 ElevenLabs":"⚪ "+t(_("手机自带语音","Built-in phone voice")))+'</span>'+(vlog.length?'<button id="vClear">'+t(_("清空","Clear"))+'</button>':'')+'<button id="vSetBtn">⚙ '+t(_("设置","Settings"))+'</button></div>';
   if (vShowSet) {
-    h += '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
+    h += onServer(elKey) ? '<div class="vform"><p class="vhint">🔑 '+t(_("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here."))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
     if (elKey) {
       if (!elVoices) h += '<p class="vhint">'+t(_("正在读取你的声音列表…","Loading your voices…"))+'</p>';
       else {
@@ -1670,7 +1707,7 @@ function voiceInner(){
         }
       }
     }
-    if (elKey) h += '<div class="vsend"><button id="elSend">📱 '+t(_("传到手机（扫二维码）","Send to phone (QR code)"))+'</button>'+(vQR?'<div id="elQR" class="vqr"></div><p class="vhint">'+t(_("用手机相机扫描，打开后点「导入」，这部手机就设置好了。二维码里有你的key，别截图或分享给别人。","Scan with the phone camera, open the link and tap Import; that phone is then set up. The code contains your key, so don\'t screenshot or share it."))+'</p><div class="vrow"><button id="elCopyLink">🔗 '+t(_("复制链接","Copy link"))+'</button><button id="elHideQR">'+t(_("隐藏","Hide"))+'</button></div>':'')+'</div>';
+    if (elKey && !onServer(elKey)) h += '<div class="vsend"><button id="elSend">📱 '+t(_("传到手机（扫二维码）","Send to phone (QR code)"))+'</button>'+(vQR?'<div id="elQR" class="vqr"></div><p class="vhint">'+t(_("用手机相机扫描，打开后点「导入」，这部手机就设置好了。二维码里有你的key，别截图或分享给别人。","Scan with the phone camera, open the link and tap Import; that phone is then set up. The code contains your key, so don\'t screenshot or share it."))+'</p><div class="vrow"><button id="elCopyLink">🔗 '+t(_("复制链接","Copy link"))+'</button><button id="elHideQR">'+t(_("隐藏","Hide"))+'</button></div>':'')+'</div>';
     h += '<p class="vhint">🔒 '+t(_("Key只保存在这部手机的浏览器里，不会上传到网页代码。每部手机设置一次。","The key stays in this phone's browser only, never in the page code. Set it once per phone."))+'</p></div>';
   }
   return h;
@@ -1870,7 +1907,7 @@ async function bkExtract(){
       else if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) content.push({type:"input_file", filename:f.name, file_data: await readURL(f)});
       else content.push({type:"input_text", text:"File "+f.name+":\n"+(await f.text()).slice(0, 60000)});
     }
-    const r = await fetch("https://api.openai.com/v1/responses", {method:"POST", headers:{Authorization:"Bearer "+aiKey, "Content-Type":"application/json"}, body:JSON.stringify({
+    const r = await fetch(OAI+"/responses", {method:"POST", headers:{Authorization:"Bearer "+aiKey, "Content-Type":"application/json"}, body:JSON.stringify({
       model:AI_MODEL, reasoning:{effort:"low"},
       input:[{role:"system", content:"Extract every travel booking (hotel, flight, car rental, train, activity) from the user's confirmation emails, screenshots, PDFs or calendar files. One item per hotel stay and one per flight segment. status = cancelled for a cancellation notice, changed for a modification or schedule-change notice (give the NEW dates, times and details), otherwise confirmed. Dates as YYYY-MM-DD and times HH:MM 24h local time. title = property name, or airline + flight number. title_ja = the property's name in the local script ("+t(META.lang.name)+") if it appears, else null. provider = the booking site or airline that issued it. confirmation = booking/confirmation number; pin = PIN, PNR or airline booking reference. guests like '2 adults'. price exactly as shown with currency. notes: room type, meals, baggage, cancellation deadline, passenger names, in one short line. Never invent values; use null when missing."},
              {role:"user", content}],
@@ -2002,7 +2039,7 @@ async function xExtract(){
   try {
     const content = [{type:"input_text", text:"Receipts from a trip in "+META.country+", "+dayISO(0)+" to "+dayISO(LAST)+". Local currency "+META.cur.code+". Write merchant and item names in "+(lang==="en"?"English":"Simplified Chinese")+"."}], thumbs = [];
     for (const f of xFiles) { content.push({type:"input_image", image_url: await shrinkImage(f)}); thumbs.push(await thumb(f)); }
-    const r = await fetch("https://api.openai.com/v1/responses", {method:"POST", headers:{Authorization:"Bearer "+aiKey, "Content-Type":"application/json"}, body:JSON.stringify({
+    const r = await fetch(OAI+"/responses", {method:"POST", headers:{Authorization:"Bearer "+aiKey, "Content-Type":"application/json"}, body:JSON.stringify({
       model:AI_MODEL, reasoning:{effort:"low"},
       input:[{role:"system", content:"Read each receipt photo (receipts from "+META.country+": convenience stores, restaurants, stations, shops, taxis, petrol stations, hotel bills). Return one entry per receipt, in the same order as the images. total = the amount actually paid including tax (合計 / お会計 / 税込), as a number without symbols. currency = ISO code, normally JPY. date YYYY-MM-DD and time HH:MM if printed. merchant = shop name translated as asked; merchant_ja = the name as printed. category: food (restaurants, cafes, convenience-store food, drinks), transport (train, bus, taxi, fuel, tolls, parking, car rental), stay (hotel, ryokan, onsen bath fees at the inn), tickets (temples, museums, attractions), shopping (souvenirs, clothes, drugstore, department stores), other. payment = cash / card / IC card etc. if printed. items: up to 12 main lines, name translated as asked plus name_ja as printed, qty, price. Never invent numbers; if a total is unreadable, use 0."},
              {role:"user", content}],
@@ -2158,10 +2195,10 @@ async function aiJSON(name, schema, sys, user, o){
   if (o.web) body.tools = [{type:"web_search"}];
   for (let n = 0; ; n++) {
     try {
-      const r = await fetch("https://api.openai.com/v1/responses", {method:"POST", signal:o.signal, headers:{Authorization:"Bearer "+aiKey, "Content-Type":"application/json"}, body:JSON.stringify(body)});
+      const r = await fetch(OAI+"/responses", {method:"POST", signal:o.signal, headers:Object.assign({Authorization:"Bearer "+aiKey, "Content-Type":"application/json"}, o.kind && onServer(aiKey) ? {"X-TP-Kind":o.kind} : {}), body:JSON.stringify(body)});
       const j = await r.json().catch(() => ({}));
       if (r.status === 401) throw Object.assign(new Error("key"), {fatal:true});
-      if (!r.ok || j.error) throw Object.assign(new Error((j.error && j.error.message) || ("HTTP "+r.status)), {fatal:r.status === 400 || r.status === 404});
+      if (!r.ok || j.error) throw Object.assign(new Error((j.error && j.error.message) || ("HTTP "+r.status)), {fatal:[400,403,404,413,429,503].includes(r.status)});
       if (j.status === "incomplete") throw new Error("incomplete: "+((j.incomplete_details && j.incomplete_details.reason) || ""));
       const out = (j.output || []).flatMap(x => x.content || []).find(c => c.type === "output_text");
       if (!out) throw new Error("empty answer");
@@ -2170,9 +2207,9 @@ async function aiJSON(name, schema, sys, user, o){
   }
 }
 async function pool(tasks, k){ let i = 0; await Promise.all(Array.from({length:Math.min(k, tasks.length)}, async () => { while (i < tasks.length) await tasks[i++](); })); }
-const genDay = (I, O, i, note, signal) => aiJSON("trip_day", DAY_SCHEMA, DAY_SYS,
+const genDay = (I, O, i, note, signal, kind) => aiJSON("trip_day", DAY_SCHEMA, DAY_SYS,
   genBrief(I)+"\n\nTrip outline (JSON):\n"+JSON.stringify(O)+"\n\nWrite day "+(i+1)+" of "+O.days.length+" ("+isoAdd(I.start, i)+", "+WD[dateOf(isoAdd(I.start, i)).getDay()].e+"): "+O.days[i].plan+(note ? "\n\nChange request for this day: "+note : ""),
-  {signal, web:I.web});
+  {signal, web:I.web, kind});
 const genExtras = (I, O, signal) => aiJSON("trip_extras", EXTRAS_SCHEMA, EXTRAS_SYS, genBrief(I)+"\n\nTrip outline (JSON):\n"+JSON.stringify(O), {signal, web:I.web});
 
 /* English Wikipedia lead image → [960px Commons image, Commons file page]; non-Commons (non-free) images are skipped */
@@ -2223,7 +2260,7 @@ function saveTripRec(rec){
   L.unshift({id:rec.id, title:O.title, accent:O.title_accent, dest:rec.input.dest, start:rec.input.start, days:O.days.length, hero:rec.img && rec.img.hero, created:rec.created});
   lsPut("trips", L);
 }
-function openTrip(id){ lsPut("active", id); location.hash = ""; location.reload(); }
+async function openTrip(id){ lsPut("active", id); try { if (window.tpFlush) await window.tpFlush(); } catch(e) {} location.hash = ""; location.reload(); }
 function deleteTrip(id){
   const L = tripList(), x = L.find(y => y.id === id); if (!x) return;
   if (!confirm(t(_("删除行程「"+t(x.title)+"」？这个行程的勾选、预订和记账也会一起删除，不能恢复。","Delete “"+t(x.title)+"”? Its ticks, bookings and expenses are removed too. This can't be undone.")))) return;
@@ -2280,7 +2317,7 @@ const STAYS = [["comfortable hotels near stations",_("交通方便的酒店","Ho
 const LIKES = [["local food",_("美食","Food")],["culture and history",_("文化历史","Culture")],["nature and scenery",_("自然风景","Nature")],["shopping",_("购物","Shopping")],["cafes",_("咖啡馆","Cafés")],["art and museums",_("艺术博物馆","Museums")],["hot springs and spa",_("温泉SPA","Hot springs")],["nightlife",_("夜生活","Nightlife")],["family and kids",_("亲子","Family")],["photography spots",_("拍照打卡","Photo spots")],["outdoor adventure",_("户外运动","Adventure")],["theme parks",_("主题乐园","Theme parks")]];
 const defInput = () => Object.assign({dest:"", start:isoAdd(isoOf(new Date()), 45), days:5, ppl:2, from:"Kuala Lumpur", pace:"balanced", move:MOVE[0][0], budget:"mid-range", stay:STAYS[0][0], likes:["local food","culture and history"], notes:"", web:false}, lsRaw("lastinput") || {});
 let tsDraft = null;
-function openTrips(v){ tsView = v || "list"; tsMsg = ""; if (tsView === "new" && !tsDraft) tsDraft = defInput(); paintTrips(); $("#tripsheet").hidden = false; document.body.classList.add("sheet-open"); }
+function openTrips(v){ loadMe(); tsView = v || "list"; tsMsg = ""; if (tsView === "new" && !tsDraft) tsDraft = defInput(); paintTrips(); $("#tripsheet").hidden = false; document.body.classList.add("sheet-open"); }
 function closeTrips(){ if (gen && gen.busy) return; $("#tripsheet").hidden = true; document.body.classList.remove("sheet-open"); }
 const optHTML = (list, v) => list.map(([k,l]) => '<option value="'+esc(k)+'"'+(k===v?" selected":"")+'>'+esc(t(l))+'</option>').join("");
 function paintTrips(){
@@ -2295,7 +2332,7 @@ function paintTrips(){
         (on ? '<span class="tcon">✓ '+t(_("正在查看","Open now"))+'</span>' : '<button data-topen="'+x.id+'" class="primary">'+t(_("打开","Open"))+'</button>')+
         (x.sample ? '' : '<button data-tedit="'+x.id+'">✏️ '+t(_("修改","Edit"))+'</button><button data-tshare="'+x.id+'">🔗 '+t(_("分享","Share"))+'</button><button data-texp="'+x.id+'">⬇︎ '+t(_("导出","Export"))+'</button><button data-tdel="'+x.id+'" class="danger" aria-label="Delete">🗑</button>')+
         '</div></div></div>'; }).join("") + '</div>';
-    h += keysHTML();
+    h += TP ? accountHTML() : keysHTML();
     h += '<label class="tsimp">⬆︎ '+t(_("导入行程文件（.json）","Import a trip file (.json)"))+'<input type="file" id="tsFile" accept=".json,application/json" hidden></label>';
     h += '<p class="tsnote">'+t(_("行程只保存在这个浏览器里。换手机用：点「分享」把链接发到手机打开，或导出文件。","Trips are saved only in this browser. To move one to your phone, tap Share and open the link there, or export the file."))+'</p>';
   } else if (tsView === "new") {
@@ -2309,7 +2346,7 @@ function paintTrips(){
     h += '<div class="wide"><span class="lab">'+t(_("兴趣（可多选）","Interests (pick any)"))+'</span><div class="tchips">'+LIKES.map(([k,l]) => chip(k,l)).join("")+'</div></div>';
     h += '<label class="wide">'+t(_("其他要求（可留空）","Anything else? (optional)"))+'<textarea id="gNotes" rows="3" placeholder="'+esc(t(_("例如：第一晚住机场附近；一定要去某个地方；带老人，少走路；吃素","e.g. first night near the airport; must see X; travelling with parents, less walking; vegetarian")))+'">'+esc(I.notes)+'</textarea></label>';
     h += '<details class="tsadv"><summary>'+t(_("AI设置","AI settings"))+'</summary><label>'+t(_("模型","Model"))+'<select id="gModel">'+GEN_MODELS.map(([k,l]) => '<option value="'+k+'"'+(k===genModel()?" selected":"")+'>'+k+' · '+esc(t(l))+'</option>').join("")+'</select></label><label class="chkl"><input type="checkbox" id="gWeb"'+(I.web?" checked":"")+'> '+t(_("联网查证营业时间和价格（更准，但慢一些、费用高一些）","Check hours and prices on the web (more accurate, slower and costs more)"))+'</label></details>';
-    if (!aiKey) h += '<label class="wide">OpenAI API key<input id="gKey" type="password" autocomplete="off" placeholder="sk-..."><small>'+t(_("只保存在这个浏览器里，和「我的预订」「记账」共用。","Kept only in this browser; shared with My bookings and Expenses."))+'</small></label>';
+    if (!aiKey && !TP) h += '<label class="wide">OpenAI API key<input id="gKey" type="password" autocomplete="off" placeholder="sk-..."><small>'+t(_("只保存在这个浏览器里，和「我的预订」「记账」共用。","Kept only in this browser; shared with My bookings and Expenses."))+'</small></label>';
     h += '</div><div class="tsbtns"><button id="gBack">← '+t(_("返回","Back"))+'</button><button id="gGo" class="primary">✨ '+t(I.replace ? _("重新生成","Regenerate") : _("生成行程","Plan my trip"))+'</button></div>';
     h += '<p class="tsnote">'+t(_("大约需要1–3分钟。AI会先排整体路线，再同时写好每一天。生成后请核对营业时间和价格。","Takes about 1–3 minutes: AI plans the route first, then writes every day at once. Check hours and prices before you go."))+'</p>';
   } else if (tsView === "gen" && gen) {
@@ -2327,7 +2364,7 @@ function paintTrips(){
   box.innerHTML = h;
   const on = (id, f) => { const el = box.querySelector("#"+id); if (el) el.onclick = f; };
   on("tsClose", closeTrips);
-  wireKeys(box);
+  wireKeys(box); wireAccount(box);
   on("tsNew", () => { tsDraft = defInput(); delete tsDraft.replace; tsView = "new"; tsMsg = ""; paintTrips(); });
   box.querySelectorAll("[data-topen]").forEach(b => b.onclick = () => openTrip(b.dataset.topen));
   box.querySelectorAll("[data-tdel]").forEach(b => b.onclick = () => deleteTrip(b.dataset.tdel));
@@ -2342,6 +2379,18 @@ function paintTrips(){
   on("gRetry", () => startGen());
   on("gEdit", () => { gen = null; tsView = "new"; paintTrips(); });
 }
+/* ---- Server mode (Railway): /api/config says which keys the server holds; calls then go through its relay
+   (/api/openai, /api/eleven) and no key is kept in the browser. On a static host (GitHub Pages) this 404s and
+   the app uses keys saved in the browser, as before. ---- */
+let OAI = "https://api.openai.com/v1", SERVER = {server:false, openai:false, eleven:false};
+if (TP) { SERVER = {server:true, openai:TP.openai, eleven:TP.eleven}; if (TP.openai) { OAI = "/api/openai/v1"; aiKey = "server"; } if (TP.eleven) { EL = "/api/eleven/v1"; elKey = "server"; } }
+const onServer = k => k === "server";
+fetch("/api/config", {cache:"no-store"}).then(r => r.ok ? r.json() : null).then(c => {
+  if (!c || !c.server) return; SERVER = c;
+  if (c.openai) { OAI = "/api/openai/v1"; aiKey = "server"; }
+  if (c.eleven) { EL = "/api/eleven/v1"; elKey = "server"; elVoices = null; try { elLoadVoices(); } catch(e) {} }
+  renderAll();
+}).catch(() => {});
 /* ---- API keys, once for the whole app. "Copy keys" puts both keys in a setup link on the clipboard; "Paste keys"
    takes that link, the Kanto app's send-to-phone link, or raw keys (OpenAI sk-…, ElevenLabs sk_…). Moving keys
    between Safari and an installed Home Screen app (separate storage on iPhone) is one copy + one paste. ---- */
@@ -2356,6 +2405,7 @@ function parseKeys(txt){
   return out;
 }
 function applyKeys(d){
+  if (onServer(aiKey)) delete d.a; if (onServer(elKey)) delete d.k;
   if (d.a) { aiKey = d.a; store.set("aikey", d.a); }
   if (d.k) { elKey = d.k; store.set("elkey", d.k); elVoices = null; }
   if (d.v) { elPref = Object.assign({}, elPref, d.v); store.set("elv", elPref); }
@@ -2363,11 +2413,12 @@ function applyKeys(d){
 }
 function keysDone(d){ keyMsg = "✓ "+t(_("已保存：","Saved: "))+[d.a ? "OpenAI" : "", d.k ? "ElevenLabs" : ""].filter(Boolean).join(" + "); paintTrips(); try { paintBookings(); paintVoice(); } catch(e) {} }
 function keysHTML(){
-  const st = (n, k) => '<span class="kst'+(k?" on":"")+'">'+n+' '+(k ? "✓ "+keyTail(k) : "✗ "+t(_("未设置","not set")))+'</span>';
+  const st = (n, k) => '<span class="kst'+(k?" on":"")+'">'+n+' '+(onServer(k) ? "✓ "+t(_("已存在服务器","on the server")) : k ? "✓ "+keyTail(k) : "✗ "+t(_("未设置","not set")))+'</span>';
+  if (onServer(aiKey) && onServer(elKey)) return '<div class="tkeys"><div class="tkhead"><b>🔑 '+t(_("API Key（保存在服务器）","API keys (kept on the server)"))+'</b>'+st("OpenAI", aiKey)+st("ElevenLabs", elKey)+'</div></div>';
   let h = '<div class="tkeys"><button class="tkhead" id="tkToggle" aria-expanded="'+tsKeys+'"><b>🔑 '+t(_("API Key（全App共用）","API keys (whole app)"))+'</b>'+st("OpenAI", aiKey)+st("ElevenLabs", elKey)+'</button>';
   if (tsKeys) {
     h += '<div class="tkbody"><p class="tsnote">'+t(_("只要输入一次，所有行程、预订、记账和语音翻译都会自动使用。换到另一个App（例如主屏幕App、慢游旧时光App）：在这里点「复制Key」，到那边点「粘贴Key」。","Enter once and every trip, bookings, expenses and the voice translator use them. To move them to another app (the Home Screen app, the Kanto app): tap Copy keys here, then Paste keys there."))+'</p>';
-    h += '<div class="tsbtns"><button id="tkPaste" class="primary">📋 '+t(_("粘贴Key","Paste keys"))+'</button>'+(aiKey || elKey ? '<button id="tkCopy">📤 '+t(_("复制Key","Copy keys"))+'</button>' : '')+'</div>';
+    h += '<div class="tsbtns"><button id="tkPaste" class="primary">📋 '+t(_("粘贴Key","Paste keys"))+'</button>'+((aiKey && !onServer(aiKey)) || (elKey && !onServer(elKey)) ? '<button id="tkCopy">📤 '+t(_("复制Key","Copy keys"))+'</button>' : '')+'</div>';
     h += '<label class="tkin">'+t(_("或手动输入／粘贴（OpenAI、ElevenLabs Key或设置链接都可以）","Or type / paste here (OpenAI key, ElevenLabs key or a setup link)"))+'<textarea id="tkText" rows="2" autocomplete="off" spellcheck="false" placeholder="sk-…  /  sk_…"></textarea></label><div class="tsbtns"><button id="tkSave">'+t(_("保存","Save"))+'</button></div>';
     if (keyMsg) h += '<p class="tsmsg">'+esc(keyMsg)+'</p>';
     h += '</div>';
@@ -2382,6 +2433,36 @@ function wireKeys(box){
     const d = parseKeys(txt); if (applyKeys(d)) keysDone(d); else { keyMsg = t(_("剪贴板里没有找到Key。","No key found on the clipboard.")); paintTrips(); } });
   on("tkSave", () => { const d = parseKeys($("#tkText").value); if (applyKeys(d)) keysDone(d); else { keyMsg = t(_("没认出Key：OpenAI以 sk- 开头，ElevenLabs以 sk_ 开头。","Not recognised: OpenAI keys start with sk-, ElevenLabs keys with sk_.")); paintTrips(); } });
 }
+/* ---- signed-in account (server mode): who, today's usage, password, admin, log out ---- */
+let me = null, acctMsg = "";
+function loadMe(){ if (!TP) return; fetch("/api/me", {cache:"no-store"}).then(r => r.ok ? r.json() : null).then(j => { if (j) { me = j; if (!$("#tripsheet").hidden) paintTrips(); } }).catch(() => {}); }
+function accountHTML(){
+  const n = (me && me.today) || {}, L = (me && me.limits) || {};
+  const use = (a, b, l) => '<span class="kst on">'+esc(t(l))+' '+(a||0)+(TP.admin ? '' : '/'+(b==null?"–":b))+'</span>';
+  let h = '<div class="tkeys"><div class="tkhead"><b>👤 '+esc(TP.name)+' <small style="font-weight:400;color:var(--ink-3)">'+esc(TP.email)+'</small></b>';
+  h += use(n.trips, L.trips, _("今日新行程","New trips today"))+use(n.redos, L.redos, _("重做","Redos"))+use(n.scans, L.scans, _("识别","Scans"))+'</div><div class="tkbody">';
+  h += '<p class="tsnote">'+t(_("行程、勾选、预订和记账都保存在你的账户里，用任何手机或电脑登录都能看到。AI Key由服务器提供，不用自己输入。","Your trips, ticks, bookings and expenses are saved to your account, so they appear on any phone or computer you log in on. AI keys come from the server; nothing to enter."))+'</p>';
+  h += '<div class="tsbtns" style="flex-wrap:wrap;justify-content:flex-start"><button id="acPw">🔒 '+t(_("改密码","Change password"))+'</button>'+(TP.admin ? '<button id="acAdmin">⚙ '+t(_("管理后台","Admin"))+'</button>' : '')+'<button id="acOut">↩ '+t(_("登出","Log out"))+'</button></div>';
+  if (acctMsg) h += '<p class="tsmsg">'+esc(acctMsg)+'</p>';
+  return h + '</div></div>';
+}
+function wireAccount(box){
+  const on = (id, f) => { const el = box.querySelector("#"+id); if (el) el.onclick = f; };
+  on("acAdmin", () => { location.href = "/admin"; });
+  on("acPw", async () => {
+    const old = prompt(t(_("当前密码","Current password"))); if (!old) return;
+    const nw = prompt(t(_("新密码（至少8位）","New password (at least 8 characters)"))); if (!nw) return;
+    try { const r = await fetch("/api/password", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({old, new:nw})}), j = await r.json();
+      acctMsg = r.ok ? "✓ "+t(_("密码已更改。","Password changed.")) : (j.error && j.error.message) || "error"; } catch(e) { acctMsg = t(_("没有网络。","No connection.")); }
+    paintTrips(); });
+  on("acOut", async () => {
+    if (!confirm(t(_("登出？这部设备上的行程副本会被清除（账户里的不受影响）。","Log out? This device's copy of your trips is cleared (your account keeps them).")))) return;
+    try { if (window.tpFlush) await window.tpFlush(); } catch(e) {}
+    try { await fetch("/logout", {method:"POST"}); } catch(e) {}
+    try { Object.keys(localStorage).filter(k => k.startsWith("tripai:")).forEach(k => localStorage.removeItem(k)); } catch(e) {}
+    try { (await caches.keys()).forEach(k => caches.delete(k)); (await navigator.serviceWorker.getRegistrations()).forEach(r => r.unregister()); } catch(e) {}
+    location.href = "/login"; });
+}
 function readForm(){
   const v = id => { const el = $("#"+id); return el ? el.value : null; }, I = tsDraft; if (!I || !$("#gDest")) return;
   I.dest = v("gDest").trim(); I.start = v("gStart") || I.start; I.days = Math.min(14, Math.max(1, parseInt(v("gDays"), 10) || 5)); I.ppl = Math.min(12, Math.max(1, parseInt(v("gPpl"), 10) || 2));
@@ -2393,6 +2474,7 @@ function readForm(){
 async function startGen(){
   const I = Object.assign({}, tsDraft);
   if (!I.dest) { tsMsg = t(_("先写目的地。","Enter a destination first.")); tsView = "new"; paintTrips(); return; }
+  if (TP && !aiKey) aiKey = "server";
   if (!aiKey) { tsMsg = t(_("需要OpenAI API key。","An OpenAI API key is needed.")); tsView = "new"; paintTrips(); return; }
   const save = Object.assign({}, I); delete save.replace; lsPut("lastinput", save);
   gen = {busy:true, input:I, t0:Date.now(), days:[], extras:null, outline:null, err:"", phase:"outline", ctrl:new AbortController()};
@@ -2441,9 +2523,9 @@ function wireRedo(){
     if (!aiKey) { redo.msg = t(_("需要OpenAI API key：在「信息」页「我的预订」里保存。","An OpenAI API key is needed: save it under Info → My bookings.")); paint(); return; }
     const note = $("#redoNote").value.trim(); redo.busy = true; redo.msg = ""; paint();
     try {
-      const R = lsRaw("trip:"+TRIP_ID); R.src.days[cur] = await genDay(R.input, R.src.outline, cur, note);
+      const R = lsRaw("trip:"+TRIP_ID); R.src.days[cur] = await genDay(R.input, R.src.outline, cur, note, undefined, "redo");
       const keep = R.img; R.img = await resolvePhotos(R.src); if (keep && keep.hero && !R.img.hero) R.img.hero = keep.hero;
-      saveTripRec(R); store.set("done-"+cur, {}); location.reload();
+      saveTripRec(R); store.set("done-"+cur, {}); try { if (window.tpFlush) await window.tpFlush(); } catch(e) {} location.reload();
     } catch(e) { redo.busy = false; redo.msg = e.message === "key" ? t(_("OpenAI key无效。","OpenAI key rejected.")) : t(_("失败：","Failed: "))+e.message; paint(); }
   };
 }

@@ -1,0 +1,9 @@
+{
+  "name": "ai-trip-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Trip Planner: static app + password gate + OpenAI/ElevenLabs relay (keys stay on the server)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=20" }
+}
