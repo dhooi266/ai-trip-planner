@@ -2647,7 +2647,12 @@ addEventListener("online", paintBars); addEventListener("offline", paintBars);
 document.querySelectorAll(".lang button[data-lang]").forEach(b => b.addEventListener("click", paintBars));
 paintBars();
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(reg => {
+  /* updates: check for a new version whenever the app comes back to the screen (an installed iPhone app stays open
+     in the background), and reload once when the new version takes over */
+  const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadSW && !reloaded) { reloaded = true; location.reload(); } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}); });
+  navigator.serviceWorker.register("sw.js", {updateViaCache:"none"}).then(() => navigator.serviceWorker.ready).then(reg => {
     /* pre-download the stop photos once per photo list, so they also work offline */
     const urls = Object.values(PHOTO).map(p => p[0]).concat(META.img.day, META.img.stay).filter(u => u && /^https:/.test(u)), sig = TRIP_ID + ":" + urls.length + ":" + urls[0];
     if (store.get("warmed") !== sig && reg.active) { reg.active.postMessage({type:"warm", urls}); store.set("warmed", sig); }

@@ -4,7 +4,7 @@
    - Google Fonts, Wikimedia stop photos, cdnjs: stale-while-revalidate in a runtime cache.
    - Everything else (Google Maps, translation, ElevenLabs) goes straight to the network.
    Bump VERSION whenever the CORE list changes. */
-const VERSION = "tripai-v3", RUNTIME = "tripai-runtime";
+const VERSION = "tripai-v4", RUNTIME = "tripai-runtime";
 const CORE = ["./", "./index.html", "./manifest.webmanifest",
   "./img/icons/icon-180.png", "./img/icons/icon-192.png", "./img/icons/icon-512.png", "./img/icons/icon-32.png",
   "./img/hero-portrait.webp", "./img/hero-wide.webp"]
@@ -26,7 +26,8 @@ self.addEventListener("fetch", e => {
   const url = new URL(req.url);
   if (url.origin === location.origin) {
     if (req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("index.html")) {
-      e.respondWith(fetch(req).then(res => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put("./index.html", copy)); } return res; })
+      /* no-cache: always ask the server (it answers 304 when nothing changed), so an update is never hidden by the HTTP cache */
+      e.respondWith(fetch(new Request(req.url, {cache:"no-cache", credentials:"same-origin"})).then(res => { if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put("./index.html", copy)); } return res; })
         .catch(() => caches.match("./index.html", {ignoreSearch:true}).then(r => r || caches.match("./"))));
       return;
     }
