@@ -537,8 +537,11 @@ em.bkd{font-style:normal;font-size:11px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.seg{stroke-dasharray:none}}
 /* TRIP LIBRARY + AI PLANNER */
 .tripbtn{border:0;background:rgba(255,255,255,.14);color:var(--snow);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;white-space:nowrap}
-@media (max-width:460px){.tripbtn span{display:none}.tripbtn{padding:4px 10px}}
+@media (max-width:360px){.tripbtn span{display:none}.tripbtn{padding:4px 10px}}
 .hero-cta{margin-top:16px;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:12px 14px;color:var(--snow);text-align:left;width:100%;max-width:440px;font:inherit;cursor:pointer;position:relative}
+.hero-cta.small{padding:9px 12px;margin-top:12px}
+.hero-cta.small>span{font-size:18px}
+.hero-cta.small b{font-size:14px}
 .hero-cta>span{font-size:24px}
 .hero-cta b{display:block;font-size:15px}
 .hero-cta small{display:block;font-size:12px;opacity:.85;line-height:1.4}
@@ -1220,8 +1223,9 @@ function renderHero(){
   document.querySelectorAll(".tabbar button").forEach((b,i) => b.querySelector("span").textContent = t(UI.tabs[i]));
   $("#foot").textContent = t(UI.foot);
   $("#tripBtn").querySelector("span").textContent = t(_("我的行程","My trips"));
-  const cta = $("#hCta"); cta.hidden = !META.sample;
-  if (META.sample) cta.innerHTML = '<span>✨</span><div><b>'+t(_("这是示例行程。想去别的地方？","This is a sample trip. Going somewhere else?"))+'</b><small>'+t(_("输入目的地，AI帮你排好这样的完整行程","Type a destination and AI builds a full plan like this one"))+'</small></div><i>'+t(_("开始规划","Plan a trip"))+'</i>';
+  const cta = $("#hCta"); cta.hidden = false; cta.classList.toggle("small", !META.sample);
+  if (!META.sample) cta.innerHTML = '<span>✨</span><div><b>'+t(_("规划新行程","Plan a new trip"))+'</b><small>'+t(_("其他行程都在左上角 🧭 我的行程","All your trips are under 🧭 My trips (top left)"))+'</small></div><i>'+t(_("开始","Start"))+' →</i>';
+  else cta.innerHTML ='<span>✨</span><div><b>'+t(_("这是示例行程。想去别的地方？","This is a sample trip. Going somewhere else?"))+'</b><small>'+t(_("输入目的地，AI帮你排好这样的完整行程","Type a destination and AI builds a full plan like this one"))+'</small></div><i>'+t(_("开始规划","Plan a trip"))+'</i>';
 }
 
 function setDayColors(){
