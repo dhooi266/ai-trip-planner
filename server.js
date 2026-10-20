@@ -101,7 +101,7 @@ ${reg ? `<label>名字 · Name<input name="name" required maxlength="60" value="
 <label>密码 · Password<input type="password" name="password" required minlength="${reg ? 8 : 1}" autocomplete="${reg ? "new-password" : "current-password"}">${reg ? "<small>至少8位 · at least 8 characters</small>" : ""}</label>
 ${reg ? `<label>邀请码 · Invite code<input name="code" required value="${escH(o.invite || "")}" autocomplete="off"><small>向管理员索取 · ask the organiser for the code</small></label>` : ""}
 <button>${reg ? "注册并进入 · Create account" : "登录 · Log in"}</button>${o.msg ? `<p class="e">${escH(o.msg)}</p>` : ""}
-${reg ? "" : `<small style="text-align:center;margin-top:14px">忘记密码？请管理员重设 · Forgot it? Ask the organiser to reset it.</small>`}</form></body></html>`);
+${reg ? "" : `<small style="text-align:center;margin-top:14px">忘记密码？请管理员重设 · Forgot it? Ask the organiser to reset it.</small>`}</form><script>if (/^#el=/.test(location.hash)) try { sessionStorage.setItem("tp_el", location.hash); } catch(e) {}</script></body></html>`);
 }
 function adminPage(res){
   res.writeHead(200, {"Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-store"});

@@ -1877,7 +1877,7 @@ function paintVoice(){
   box.querySelectorAll("button[data-vr]").forEach(b => b.onclick = () => { unlockAudio(); const x = vlog[+b.dataset.vr], o = (x.outs || [{l:x.to, text:x.out}])[+b.dataset.vk || 0]; elSpeak(o.text, o.l).catch(e => { vErr(e); paintVoice(); }); });
   const c = $("#vClear"); if (c) c.onclick = () => { vlog = []; vMsg = ""; paintVoice(); };
   $("#vSetBtn").onclick = () => { vShowSet = !vShowSet; if (vShowSet && elKey && !elVoices) elLoadVoices(); paintVoice(); };
-  const sv = $("#elSave"); if (sv) sv.onclick = async () => { const k = ($("#elKeyIn").value || "").trim(); if (!k) return;
+  const sv = $("#elSave"); if (sv) sv.onclick = async () => { let k = ($("#elKeyIn").value || "").trim(); if (!k) return; if (TP) k = parseKeys(k).k || k;
     if (TP && TP.admin) { vMsg = "⏳ "+t(_("保存到服务器…","Saving to the server…")); paintVoice();
       try { const r = await fetch("/api/admin/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({eleven:k})});
         if (!r.ok) throw new Error("HTTP "+r.status); vMsg = "✓ "+t(_("已保存到服务器，所有用户都能用了。正在重新载入…","Saved on the server for every account. Reloading…")); paintVoice(); setTimeout(() => location.reload(), 900);
@@ -1912,11 +1912,23 @@ function drawQR(el, text){
   sc.onload = go; sc.onerror = () => { el.textContent = t(_("二维码工具加载失败，请用「复制链接」。","Couldn't load the QR tool; use Copy link.")); };
   document.head.appendChild(sc);
 }
-function importSetup(){
-  const m = location.hash.match(/^#el=([A-Za-z0-9_-]+)$/); if (!m) return;
+const RAILWAY_URL = "https://ai-trip-planner-production-05e2.up.railway.app/";
+async function importSetup(){
+  let hs = location.hash; if (TP && !/^#el=/.test(hs)) { try { hs = sessionStorage.getItem("tp_el") || ""; } catch(e) {} }
+  try { sessionStorage.removeItem("tp_el"); } catch(e) {}
+  const m = hs.match(/^#el=([A-Za-z0-9_-]+)$/); if (!m) return;
   let d = null; try { d = JSON.parse(unb64u(m[1])); } catch(e) {}
   try { history.replaceState(null, "", location.pathname + location.search); } catch(e) {}
   if (!d || !((typeof d.k === "string" && d.k) || (typeof d.a === "string" && d.a))) return;
+  if (TP) {
+    if (!TP.admin) { alert(t(_("这个版本的Key由主办方放在服务器上，不用自己设置。","On this version the organiser keeps the keys on the server; nothing to set up."))); return; }
+    const b = {}; if (typeof d.k === "string" && d.k) b.eleven = d.k; if (typeof d.a === "string" && d.a && !TP.openai) b.openai = d.a;
+    if (!Object.keys(b).length) { alert(t(_("服务器已经有这些Key了。","The server already has these keys."))); return; }
+    if (!confirm(t(_("把"+(b.eleven ? "ElevenLabs" : "")+(b.eleven && b.openai ? " 和 " : "")+(b.openai ? "OpenAI" : "")+" Key保存到服务器？所有用户都会自动使用。","Save the "+[b.eleven && "ElevenLabs", b.openai && "OpenAI"].filter(Boolean).join(" and ")+" key on the server? Every account will use it.")))) return;
+    try { const r = await fetch("/api/admin/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}); if (!r.ok) throw new Error("HTTP "+r.status);
+      alert("✓ "+t(_("已保存到服务器。","Saved on the server."))); location.reload(); } catch(e) { alert(t(_("保存失败：","Couldn't save: "))+e.message); }
+    return;
+  }
   if (!confirm(lang==="en" ? "Save the API keys from your other device in this app?" : "要把另一台设备的 API Key 保存到这个App吗？")) return;
   if (typeof d.k === "string" && d.k) { elKey = d.k; store.set("elkey", elKey); }
   if (typeof d.a === "string" && d.a) { aiKey = d.a; store.set("aikey", aiKey); }
@@ -2580,7 +2592,8 @@ function keysHTML(){
   let h = '<div class="tkeys"><button class="tkhead" id="tkToggle" aria-expanded="'+tsKeys+'"><b>🔑 '+t(_("API Key（全App共用）","API keys (whole app)"))+'</b>'+st("OpenAI", aiKey)+st("ElevenLabs", elKey)+'</button>';
   if (tsKeys) {
     h += '<div class="tkbody"><p class="tsnote">'+t(_("只要输入一次，所有行程、预订、记账和语音翻译都会自动使用。换到另一个App（例如主屏幕App、慢游旧时光App）：在这里点「复制Key」，到那边点「粘贴Key」。","Enter once and every trip, bookings, expenses and the voice translator use them. To move them to another app (the Home Screen app, the Kanto app): tap Copy keys here, then Paste keys there."))+'</p>';
-    h += '<div class="tsbtns"><button id="tkPaste" class="primary">📋 '+t(_("粘贴Key","Paste keys"))+'</button>'+((aiKey && !onServer(aiKey)) || (elKey && !onServer(elKey)) ? '<button id="tkCopy">📤 '+t(_("复制Key","Copy keys"))+'</button>' : '')+'</div>';
+    h += '<div class="tsbtns"><button id="tkPaste" class="primary">📋 '+t(_("粘贴Key","Paste keys"))+'</button>'+((aiKey && !onServer(aiKey)) || (elKey && !onServer(elKey)) ? '<button id="tkCopy">📤 '+t(_("复制Key","Copy keys"))+'</button>' : '')+'</div>'+
+      (!TP && elKey ? '<div class="tsbtns"><button id="tkRail">🚀 '+t(_("把Key发送到Railway版（管理员）","Send keys to the Railway version (admin)"))+'</button></div>' : '');
     h += '<label class="tkin">'+t(_("或手动输入／粘贴（OpenAI、ElevenLabs Key或设置链接都可以）","Or type / paste here (OpenAI key, ElevenLabs key or a setup link)"))+'<textarea id="tkText" rows="2" autocomplete="off" spellcheck="false" placeholder="sk-…  /  sk_…"></textarea></label><div class="tsbtns"><button id="tkSave">'+t(_("保存","Save"))+'</button></div>';
     if (keyMsg) h += '<p class="tsmsg">'+esc(keyMsg)+'</p>';
     h += '</div>';
@@ -2591,6 +2604,7 @@ function wireKeys(box){
   const on = (id, f) => { const el = box.querySelector("#"+id); if (el) el.onclick = f; };
   on("tkToggle", () => { tsKeys = !tsKeys; keyMsg = ""; paintTrips(); });
   on("tkCopy", async () => { try { await navigator.clipboard.writeText(setupLink()); keyMsg = "✓ "+t(_("已复制。到另一个App点「粘贴Key」。不要把它发给别人。","Copied. Tap Paste keys in the other app. Don't send it to anyone else.")); } catch(e) { keyMsg = t(_("复制失败。","Couldn't copy.")); } paintTrips(); });
+  on("tkRail", () => { const u = RAILWAY_URL + "#el=" + b64u(JSON.stringify({k:elKey, a:aiKey})); const w = window.open(u, "_blank"); if (!w) location.href = u; });
   on("tkPaste", async () => { let txt = ""; try { txt = await navigator.clipboard.readText(); } catch(e) { keyMsg = t(_("浏览器不让直接读取剪贴板：请长按下面的框，点「粘贴」，再点保存。","This browser won't read the clipboard directly: long-press the box below, tap Paste, then Save.")); paintTrips(); return; }
     const d = parseKeys(txt); if (applyKeys(d)) keysDone(d); else { keyMsg = t(_("剪贴板里没有找到Key。","No key found on the clipboard.")); paintTrips(); } });
   on("tkSave", () => { const d = parseKeys($("#tkText").value); if (applyKeys(d)) keysDone(d); else { keyMsg = t(_("没认出Key：OpenAI以 sk- 开头，ElevenLabs以 sk_ 开头。","Not recognised: OpenAI keys start with sk-, ElevenLabs keys with sk_.")); paintTrips(); } });
