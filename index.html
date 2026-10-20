@@ -254,6 +254,24 @@ a{color:inherit}
 .crow .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:middle}
 .crow b{font-family:var(--mono);font-weight:500;color:var(--ink);white-space:nowrap}
 .note{font-size:13px;color:var(--ink-3);margin:10px 2px 0}
+.wx{margin-top:14px;background:var(--surface);border-radius:20px;padding:16px 18px;box-shadow:var(--shadow)}
+.wx-top{display:flex;align-items:center;gap:14px}
+.wx-ic{font-size:40px;line-height:1}
+.wx-t{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1}
+.wx-t small{font-size:17px;color:var(--ink-3);font-weight:500}
+.wx-d{flex:1;min-width:0}
+.wx-d b{display:block;font-size:15px}
+.wx-d span{display:block;font-size:13px;color:var(--ink-3);margin-top:3px}
+.wx-wear{margin:12px 0 0;font-size:14px;color:var(--ink-2)}
+.wx-src{margin:8px 0 0;font-size:12px;color:var(--ink-3)}
+.wx-row{display:flex;gap:6px;overflow-x:auto;margin:14px -4px 0;padding:2px 4px 4px;scrollbar-width:none}
+.wx-row::-webkit-scrollbar{display:none}
+.wx-row button{flex:0 0 auto;min-width:56px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:14px;padding:7px 6px;font:inherit;font-size:12px;text-align:center;cursor:pointer}
+.wx-row button[aria-pressed="true"]{border-color:var(--dc);box-shadow:inset 0 0 0 1px var(--dc)}
+.wx-row button i{display:block;font-style:normal;font-size:18px;margin:2px 0}
+.wx-row button b{font-family:var(--mono);font-size:12px}
+.wx-row button em{font-style:normal;color:var(--ink-3);font-family:var(--mono)}
+.wx.load{color:var(--ink-3);font-size:14px}
 
 .pager{display:flex;gap:10px;margin:26px 0 8px}
 .pager button{flex:1;border:0;border-radius:16px;padding:14px;background:var(--surface);box-shadow:var(--shadow);text-align:left;font-size:13px;color:var(--ink-3)}
@@ -666,7 +684,7 @@ body.sheet-open{overflow:hidden}
    tripai:__rev = the server revision this device has, so an older cached page never overwrites newer data. ---- */
 const TP = window.__TP || null;
 const DEVICE_KEYS = ["tripai:aikey","tripai:elkey","tripai:warmed","tripai:instdismiss","tripai:__pending","tripai:__uid","tripai:__rev"];
-const syncedKey = k => typeof k === "string" && k.startsWith("tripai:") && !DEVICE_KEYS.includes(k);
+const syncedKey = k => typeof k === "string" && k.startsWith("tripai:") && !DEVICE_KEYS.includes(k) && !/:wx(geo)?$/.test(k);
 if (TP) (function(){
   const L = localStorage, SP = Storage.prototype, oSet = SP.setItem, oRem = SP.removeItem;
   let q = {};
@@ -1278,8 +1296,10 @@ function renderDay(){
   { const hbD = bkStay(cur)[0];
     if (hbD) h += '<span class="pill bkpill">🛏 ✅ <b>'+esc(hbD.title)+'</b></span>';
     else if (t(d.stay) !== "—") h += '<span class="pill">🛏 <b>'+esc(t(d.stay))+'</b></span>'; }
+  h += '<span class="pill" id="wxPill"'+(wxPillTxt(cur)?'':' hidden')+'>'+wxPillTxt(cur)+'</span>';
   bkOn(cur).forEach(b => h += '<span class="pill bkpill">'+(BKICON[b.kind]||"📌")+' <b>'+esc(b.flight_no || b.title)+(b.kind==="flight" ? " "+[b.start_time, b.end_time].filter(Boolean).join("→") : b.start_date===dayISO(cur) && b.start_time ? " "+b.start_time : b.end_time ? " → "+b.end_time : "")+'</b></span>');
   h += '</div><div class="dh-foot">' + (LEGS[cur] ? '<a class="go" href="#routes">'+t(_("🧭 分段路线 ↓","🧭 Route legs ↓"))+'</a>' : '') + '<span class="dh-swipe">'+t(_("← 滑动切换日期 →","← swipe for other days →"))+'</span></div></div></div>';
+  h += '<div id="wxCard">'+wxHTML(cur)+'</div>';
   h += dayMapHTML();
   h += '<div id="routes">'+routesHTML(cur)+'</div>';
 
@@ -1337,6 +1357,7 @@ function renderDay(){
   wireMap();
   wireDayHero();
   wireRedo();
+  wireWx(); wxLoad();
   { const g = $("#xGoTab"); if (g) g.onclick = () => { xDay = dayISO(cur); const tb = document.querySelector('.tabbar button[data-view="spend"]'); if (tb) tb.click(); paintExp(); }; }
   $("#dayview").querySelectorAll(".rleg").forEach(b => { const pick = e => { if (e.target.closest("a")) return; const n=+b.dataset.leg; selLeg = selLeg===n ? -1 : n; redrawMap(); markLegs(); $("#dmap").scrollIntoView && $("#dmap").scrollIntoView({behavior:"smooth",block:"center"}); };
     b.onclick = pick; b.onkeydown = e => { if (e.key==="Enter"||e.key===" "){ e.preventDefault(); pick(e); } }; });
@@ -1356,6 +1377,135 @@ function wireDayHero(){
   [cur-1, cur+1].forEach(n => { if (n >= 0 && n <= LAST && META.img.day[n]) new Image().src = META.img.day[n]; });
 }
 function firstOpen(d){ return d.stops.findIndex(s => s.k === "spot"); }
+
+/* ---- Weather (Open-Meteo, no key). Each day is placed with Wikipedia coordinates of its own sights, else a
+   place-name search. Days up to 15 days ahead (and recent past) get the real forecast; days further out get the
+   typical weather for that date = the same week averaged over the last 5 years. Cached per trip on this device. ---- */
+const WXC = [[[0],"☀️",_("晴","Clear")],[[1],"🌤",_("大致晴朗","Mostly clear")],[[2],"⛅",_("多云","Partly cloudy")],[[3],"☁️",_("阴天","Overcast")],
+  [[45,48],"🌫",_("有雾","Fog")],[[51,53,55,56,57],"🌦",_("毛毛雨","Drizzle")],[[61,63,66],"🌧",_("下雨","Rain")],[[65,67],"🌧",_("大雨","Heavy rain")],
+  [[71,73,75,77],"🌨",_("下雪","Snow")],[[80,81,82],"🌦",_("阵雨","Showers")],[[85,86],"🌨",_("阵雪","Snow showers")],[[95,96,99],"⛈",_("雷雨","Thunderstorms")]];
+const wxC = c => WXC.find(x => x[0].includes(c)) || [[],"🌡",_("天气","Weather")];
+const isoToday = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const dDiff = (a,b) => Math.round((Date.parse(a) - Date.parse(b)) / 86400000);
+const wxLive = iso => { const n = dDiff(iso, isoToday()); return n <= 15 && n >= -60; };
+let WX = store.get("wx"), wxBusy = false;
+const wxSig = () => META.start+"|"+DAYS.length+"|"+DAYS.map(d => d.stay.z || d.stay).join(",");
+const wxDay = i => WX && WX.sig === wxSig() && WX.days ? WX.days[i] : null;
+function wxPillTxt(i){ const w = wxDay(i); return w ? wxC(w.code)[1]+' <b>'+Math.round(w.hi)+'°/'+Math.round(w.lo)+'°</b>' : ""; }
+function wxWear(w){
+  const hi = w.hi, lo = w.lo, wet = w.s === "f" ? (w.pop || 0) >= 45 || (w.mm || 0) >= 2 : (w.rain || 0) >= 40, snow = [71,73,75,77,85,86].includes(w.code);
+  let a = lo < -3 ? _("厚羽绒、帽子手套，早晚很冷","Heavy coat, hat and gloves; mornings and nights are freezing")
+    : lo < 8 ? _("保暖外套加毛衣，早晚冷","Warm coat and a sweater; cold mornings and nights")
+    : lo < 15 ? _("外套或夹克，洋葱式穿搭","Jacket and layers you can peel off")
+    : hi < 24 ? _("长袖或薄外套就够","Long sleeves or a light layer")
+    : hi < 31 ? _("短袖为主，带件薄外套进室内","T-shirt weather; a light layer for air-con")
+    : _("很热：轻薄衣物、防晒、多喝水","Hot: light clothes, sunscreen and plenty of water");
+  if (snow) a = _(a.z+"；可能下雪，穿防滑鞋", a.e+"; snow possible, wear grippy shoes");
+  else if (wet) a = _(a.z+"；记得带伞", a.e+"; bring an umbrella");
+  return a;
+}
+function wxHTML(i){
+  const w = wxDay(i);
+  if (!w) return WX && WX.fail ? "" : '<div class="wx load">🌤 '+t(_("正在获取天气…","Getting the weather…"))+'</div>';
+  const c = wxC(w.code), iso = dayISO(i), [mo,da] = DAYS[i].d.split("/");
+  const rain = w.s === "f" ? (w.pop != null ? t(_("降雨概率 ","Rain chance "))+Math.round(w.pop)+"%" : (w.mm ? t(_("雨量 ","Rain "))+w.mm.toFixed(1)+"mm" : ""))
+    : t(_("下雨天约 ","Rainy on ~"))+Math.round(w.rain)+"%"+t(_(""," of days"));
+  const where = w.at ? "📍 "+w.at : "";
+  let h = '<div class="wx"><div class="wx-top"><span class="wx-ic">'+c[1]+'</span><div class="wx-t">'+Math.round(w.hi)+'°<small> / '+Math.round(w.lo)+'°C</small></div><div class="wx-d"><b>'+(w.s === "c" ? t(_("通常","Usually "))+t(c[2]).toLowerCase() : t(c[2]))+'</b><span>'+esc([rain ? "💧 "+rain : "", where].filter(Boolean).join(" · "))+'</span></div></div>';
+  h += '<p class="wx-wear">👕 '+esc(t(wxWear(w)))+'</p>';
+  const n = dDiff(iso, isoToday()) - 15;
+  h += '<p class="wx-src">'+(w.s === "f" ? t(_("实时预报 · 更新于 ","Live forecast · updated "))+new Date(WX.at).toLocaleTimeString(lang === "en" ? "en-GB" : "zh-CN", {hour:"2-digit", minute:"2-digit"})
+    : t(_(mo+"月"+da+"日前后的往年平均（过去5年）。","Typical for "+monAbbr(i).charAt(0)+monAbbr(i).slice(1).toLowerCase()+" "+da+" (average of the last 5 years). "))+(n > 0 ? t(_("出发前约16天会自动换成实时预报。","The live forecast takes over about 16 days before."))+(n < 60 ? t(_("（还有"+n+"天）"," ("+n+" days to go)")) : "") : ""))+' · Open-Meteo</p>';
+  if (WX.days.some(Boolean)) h += '<div class="wx-row">'+DAYS.map((d,k) => { const x = WX.days[k]; return '<button data-wxgo="'+k+'" aria-pressed="'+(k===i)+'">D'+(k+1)+(x ? '<i>'+wxC(x.code)[1]+'</i><b>'+Math.round(x.hi)+'°</b> <em>'+Math.round(x.lo)+'°</em>' : '<i>·</i>')+'</button>'; }).join("")+'</div>';
+  return h + '</div>';
+}
+function wireWx(){
+  document.querySelectorAll("[data-wxgo]").forEach(b => b.onclick = () => go(+b.dataset.wxgo, false));
+  const sel = document.querySelector('.wx-row [aria-pressed="true"]'); if (sel) { const row = sel.parentNode; row.scrollLeft = sel.offsetLeft - row.clientWidth/2 + sel.offsetWidth/2; }
+}
+function wxPaint(){
+  const c = $("#wxCard"); if (c) { c.innerHTML = wxHTML(cur); wireWx(); }
+  const p = $("#wxPill"); if (p) { const s = wxPillTxt(cur); p.innerHTML = s; p.hidden = !s; }
+}
+/* where each day happens, best first: Wikipedia articles of the day's sights (exact coordinates), then names */
+function wxQueries(i){
+  const W = [], Q = [];
+  if (TRIP_REC) { const d = TRIP_REC.src.days[i] || {}, o = (TRIP_REC.src.outline.days || [])[i] || {}, si = d.stay_info;
+    W.push(d.wiki, ...(d.stops || []).filter(s => s.k === "spot").map(s => s.wiki), si && si.wiki);
+    Q.push(o.night_area, si && si.search); }
+  Q.push(...DAYS[i].stops.filter(s => s.k === "spot" && s.q).map(s => s.q), STAYN[i] && STAYN[i][2]);
+  const u = a => [...new Set(a.filter(Boolean).map(String))];
+  return {w:u(W).slice(0,4), q:u(Q).slice(0,3)};
+}
+let wxNomi = Promise.resolve();
+async function wxGeo(i, cache){
+  const Qs = wxQueries(i), sig = JSON.stringify(Qs);
+  if (cache[i] && cache[i].sig === sig) return cache[i];
+  const ok = (lat, lon, at) => (cache[i] = {sig, lat:+(+lat).toFixed(3), lon:+(+lon).toFixed(3), at});
+  for (const w of Qs.w) { try {
+    const r = await fetch("https://en.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(w.trim().replace(/ /g,"_"))+"?redirect=true");
+    if (r.ok) { const j = await r.json(); if (j.coordinates) return ok(j.coordinates.lat, j.coordinates.lon, j.title || w); } } catch(e) {} }
+  for (const q of Qs.q) {
+    /* OpenStreetMap search, one request a second as its usage policy asks */
+    const hit = await (wxNomi = wxNomi.then(async () => { try {
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=en&q="+encodeURIComponent(q+(META.country ? ", "+META.country : "")));
+      const j = r.ok ? await r.json() : []; return j[0] || null; } catch(e) { return null; } finally { await new Promise(z => setTimeout(z, 1100)); } }));
+    if (hit) return ok(hit.lat, hit.lon, q.split(",")[0]);
+    try { const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name="+encodeURIComponent(q.split(",")[0].trim()));
+      const g = r.ok && ((await r.json()).results || [])[0]; if (g) return ok(g.latitude, g.longitude, g.name); } catch(e) {}
+  }
+  return null;
+}
+const omArr = j => Array.isArray(j) ? j : [j];
+async function wxLoad(force){
+  const sig = wxSig(), live = DAYS.some((d,i) => wxLive(dayISO(i))), age = WX && WX.at ? Date.now() - WX.at : Infinity;
+  if (wxBusy || (!force && WX && WX.sig === sig && (WX.fail ? age < 120e3 : age < (live ? 3 : 24*7) * 3600e3 && WX.days.every((w,i) => !w || (w.s === "f") === wxLive(dayISO(i)))))) return;
+  if (!navigator.onLine && WX && WX.days) return;
+  wxBusy = true;
+  try {
+    const geo = store.get("wxgeo") || {}, pts = [];
+    await pool(DAYS.map((d,i) => async () => { pts[i] = await wxGeo(i, geo); }), 4);
+    for (let i = 0; i < pts.length; i++) if (!pts[i]) pts[i] = pts[i-1] || null;
+    for (let i = pts.length - 1; i >= 0; i--) if (!pts[i]) pts[i] = pts[i+1] || null;
+    store.set("wxgeo", geo);
+    if (!pts.some(Boolean)) throw new Error("no place");
+    /* one request per kind: unique points, then each day picks its own date */
+    const L = [], at = i => { const p = pts[i], k = p.lat+","+p.lon; let n = L.findIndex(x => x.k === k); if (n < 0) { L.push({k, p}); n = L.length - 1; } return n; };
+    const days = DAYS.map(() => null), F = [], C = [];
+    DAYS.forEach((d,i) => { if (!pts[i]) return; (wxLive(dayISO(i)) ? F : C).push({i, iso:dayISO(i), n:at(i)}); });
+    const ll = "latitude="+L.map(x => x.p.lat).join(",")+"&longitude="+L.map(x => x.p.lon).join(",");
+    if (F.length) {
+      const a = F.map(x => x.iso).sort(), r = await fetch("https://api.open-meteo.com/v1/forecast?"+ll+"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum&timezone=auto&start_date="+a[0]+"&end_date="+a[a.length-1]);
+      if (!r.ok) throw new Error("forecast "+r.status);
+      const J = omArr(await r.json());
+      F.forEach(x => { const D = J[x.n].daily, k = D.time.indexOf(x.iso); if (k < 0 || D.temperature_2m_max[k] == null) return;
+        days[x.i] = {s:"f", code:D.weather_code[k], hi:D.temperature_2m_max[k], lo:D.temperature_2m_min[k], pop:D.precipitation_probability_max[k], mm:D.precipitation_sum[k], at:pts[x.i].at}; });
+    }
+    if (C.length) {
+      /* the same window (±3 days) in each of the last 5 years that have full data */
+      const a = C.map(x => x.iso).sort(), lim = isoAdd(isoToday(), -7), shift = (iso, y) => { const p = iso.split("-"); let s2 = (+p[0]-y)+"-"+p[1]+"-"+p[2]; if (p[1] === "02" && p[2] === "29") s2 = (+p[0]-y)+"-02-28"; return s2; };
+      const yrs = []; for (let y = 1; yrs.length < 5 && y < 12; y++) if (shift(isoAdd(a[a.length-1], 3), y) <= lim) yrs.push(y);
+      const res = await Promise.all(yrs.map(async y => { try {
+        const r = await fetch("https://archive-api.open-meteo.com/v1/archive?"+ll+"&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto&start_date="+shift(isoAdd(a[0], -3), y)+"&end_date="+shift(isoAdd(a[a.length-1], 3), y));
+        return r.ok ? {y, J:omArr(await r.json())} : null; } catch(e) { return null; } }));
+      C.forEach(x => { const hi = [], lo = [], wet = [], codes = {};
+        res.filter(Boolean).forEach(({y, J}) => { const D = J[x.n] && J[x.n].daily; if (!D) return;
+          for (let o = -3; o <= 3; o++) { const k = D.time.indexOf(shift(isoAdd(x.iso, o), y)); if (k < 0 || D.temperature_2m_max[k] == null) continue;
+            hi.push(D.temperature_2m_max[k]); lo.push(D.temperature_2m_min[k]); wet.push((D.precipitation_sum[k] || 0) >= 1 ? 1 : 0);
+            const c0 = D.weather_code[k]; if (c0 <= 3 || c0 === 45 || c0 === 48) { codes[c0] = codes[c0] || {n:0, c:c0}; codes[c0].n++; } } });
+        if (!hi.length) return;
+        const avg = v => v.reduce((s2,z) => s2+z, 0) / v.length, rain = avg(wet) * 100;
+        /* typical sky: the most common dry-day sky, or rain / showers when it rains on a third of days or more */
+        const sky = Object.values(codes).sort((p,q) => q.n - p.n)[0];
+        const code = rain >= 50 ? (avg(hi) <= 2 ? 73 : 61) : rain >= 33 ? (avg(hi) <= 2 ? 85 : 80) : sky ? sky.c : 2;
+        days[x.i] = {s:"c", code, hi:avg(hi), lo:avg(lo), rain, at:pts[x.i].at}; });
+    }
+    if (!days.some(Boolean)) throw new Error("no data");
+    WX = {sig, at:Date.now(), days};
+  } catch(e) { console.warn("weather", e); if (!(WX && WX.sig === sig && WX.days)) WX = {sig, fail:true, at:Date.now(), days:[]}; }
+  store.set("wx", WX); wxBusy = false; wxPaint();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && typeof wxLoad === "function") wxLoad(); });
 
 function go(i, scroll){
   if (i < 0 || i > LAST) return;

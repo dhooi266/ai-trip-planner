@@ -31,6 +31,9 @@ Dates come from `META.start` (`dayISO`, `isoAdd`, `monAbbr`); day count from `DA
 Money: `jp()` prints the local symbol; `fx()` converts "{sym}1,500–2,000" (and "N{zh name}") text to RM;
 `fxUnit()` picks ¥100 / ₩1,000 / €1 for the rate box. Translate tab is hidden when the local language is zh/en.
 
+## Weather (`wxLoad`, `wxHTML`, Open-Meteo, no key)
+Card under each day hero + a pill in the hero. `wxQueries(i)` → place: Wikipedia summary `coordinates` of the day's wiki / spot / stay articles, else OpenStreetMap Nominatim (1 req/s) or Open-Meteo geocoding of `night_area`, stay search, stop `q`. Days from 60 days ago to 15 ahead = live forecast (one multi-point request); later days = typical weather (archive, same date ±3 days over the last 5 years). Cached per device at `<tripId>:wx` / `:wxgeo` (never synced); forecast refreshes after 3 h, typical after a week, failures retry after 2 min.
+
 ## Storage (`store`, prefix `tripai:`)
 App-wide keys (`GLOBAL_KEYS`): lang, money, elkey, elv, aikey, vlang, trdir, trhist, instdismiss, warmed,
 active, trips, aimodel. Everything else is per trip at `tripai:<tripId>:<key>` (day, done-N, prep, bookings,
