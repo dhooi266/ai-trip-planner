@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="AI行程">
-<link rel="apple-touch-icon" href="img/icons/icon-180.png">
-<link rel="icon" type="image/png" sizes="32x32" href="img/icons/icon-32.png">
+<link rel="apple-touch-icon" href="img/icons/icon-180.png?v=2">
+<link rel="icon" type="image/png" sizes="32x32" href="img/icons/icon-32.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -2484,7 +2484,7 @@ function showInstallGuide(){
     ["⬆️", _("点「分享」","Tap “Share”"), null],
     ["➕", _("往下滑，点「添加到主屏幕」","Scroll down and tap “Add to Home Screen”"), _("找不到就点最下面的「编辑操作」把它加进来","Not listed? Tap “Edit Actions” at the bottom to add it")],
     ["✅", _("打开「作为网页App打开」，再点右上角「添加」","Keep “Open as Web App” on, then tap “Add”"), null],
-    ["🏮", _("回到主屏幕，点灯笼图标打开","Go to the Home Screen and open the lantern icon"), _("在App里重新设置一次ElevenLabs key（App和Safari分开保存）","Set your ElevenLabs key once more inside the app (it is stored separately from Safari)")]
+    ["✈️", _("回到主屏幕，点纸飞机图标打开","Go to the Home Screen and open the paper-plane icon"), _("在App里重新设置一次ElevenLabs key（App和Safari分开保存）","Set your ElevenLabs key once more inside the app (it is stored separately from Safari)")]
   ];
   let g = $("#instguide");
   if (!g) { g = document.createElement("div"); g.id = "instguide"; g.setAttribute("role","dialog"); g.setAttribute("aria-modal","true"); document.body.appendChild(g); }
