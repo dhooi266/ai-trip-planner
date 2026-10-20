@@ -602,6 +602,14 @@ body.sheet-open{overflow:hidden}
 .tgsteps li.bad i{border-color:var(--accent)}
 .tgtime{font-family:var(--mono);font-size:13px;color:var(--ink-3);margin-top:12px}
 @keyframes spin{to{transform:rotate(360deg)}}
+.tkeys{margin-top:12px;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.tkhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;width:100%;border:0;background:var(--surface-2);color:var(--ink);padding:12px 14px;text-align:left;font:inherit}
+.tkhead b{flex-basis:100%;font-size:14px}
+.kst{font-size:12px;border-radius:999px;padding:2px 9px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--ink-2)}
+.kst.on{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--ink)}
+.tkbody{padding:4px 14px 14px}
+.tkin{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-2);margin-top:12px}
+.tkin textarea{font-size:16px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:12px;padding:9px 11px;width:100%;font-family:var(--mono)}
 #redoWrap{margin-top:14px}
 .redo{width:100%;border:1px dashed var(--dc);background:transparent;color:var(--ink);border-radius:14px;padding:11px;font-size:14px;font-weight:700}
 .redobox{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);padding:14px}
@@ -1709,9 +1717,9 @@ function importSetup(){
   const m = location.hash.match(/^#el=([A-Za-z0-9_-]+)$/); if (!m) return;
   let d = null; try { d = JSON.parse(unb64u(m[1])); } catch(e) {}
   try { history.replaceState(null, "", location.pathname + location.search); } catch(e) {}
-  if (!d || typeof d.k !== "string" || !d.k) return;
-  if (!confirm(lang==="en" ? "Import the ElevenLabs voice settings from your other device onto this phone?" : "要把另一台设备的 ElevenLabs 语音设置导入到这部手机吗？")) return;
-  elKey = d.k; store.set("elkey", elKey);
+  if (!d || !((typeof d.k === "string" && d.k) || (typeof d.a === "string" && d.a))) return;
+  if (!confirm(lang==="en" ? "Save the API keys from your other device in this app?" : "要把另一台设备的 API Key 保存到这个App吗？")) return;
+  if (typeof d.k === "string" && d.k) { elKey = d.k; store.set("elkey", elKey); }
   if (typeof d.a === "string" && d.a) { aiKey = d.a; store.set("aikey", aiKey); }
   if (d.v && typeof d.v === "object") { elPref = {}; [TLC,"zh","en"].forEach(k => { if (typeof d.v[k] === "string") elPref[k] = d.v[k]; }); store.set("elv", elPref); }
   elVoices = null; vMsg = "✓ " + t(_("已导入ElevenLabs设置，可以开始用了。","ElevenLabs settings imported; you're ready to go."));
@@ -2287,6 +2295,7 @@ function paintTrips(){
         (on ? '<span class="tcon">✓ '+t(_("正在查看","Open now"))+'</span>' : '<button data-topen="'+x.id+'" class="primary">'+t(_("打开","Open"))+'</button>')+
         (x.sample ? '' : '<button data-tedit="'+x.id+'">✏️ '+t(_("修改","Edit"))+'</button><button data-tshare="'+x.id+'">🔗 '+t(_("分享","Share"))+'</button><button data-texp="'+x.id+'">⬇︎ '+t(_("导出","Export"))+'</button><button data-tdel="'+x.id+'" class="danger" aria-label="Delete">🗑</button>')+
         '</div></div></div>'; }).join("") + '</div>';
+    h += keysHTML();
     h += '<label class="tsimp">⬆︎ '+t(_("导入行程文件（.json）","Import a trip file (.json)"))+'<input type="file" id="tsFile" accept=".json,application/json" hidden></label>';
     h += '<p class="tsnote">'+t(_("行程只保存在这个浏览器里。换手机用：点「分享」把链接发到手机打开，或导出文件。","Trips are saved only in this browser. To move one to your phone, tap Share and open the link there, or export the file."))+'</p>';
   } else if (tsView === "new") {
@@ -2318,6 +2327,7 @@ function paintTrips(){
   box.innerHTML = h;
   const on = (id, f) => { const el = box.querySelector("#"+id); if (el) el.onclick = f; };
   on("tsClose", closeTrips);
+  wireKeys(box);
   on("tsNew", () => { tsDraft = defInput(); delete tsDraft.replace; tsView = "new"; tsMsg = ""; paintTrips(); });
   box.querySelectorAll("[data-topen]").forEach(b => b.onclick = () => openTrip(b.dataset.topen));
   box.querySelectorAll("[data-tdel]").forEach(b => b.onclick = () => deleteTrip(b.dataset.tdel));
@@ -2331,6 +2341,46 @@ function paintTrips(){
   on("gStop", () => { if (gen && gen.ctrl) gen.ctrl.abort(); });
   on("gRetry", () => startGen());
   on("gEdit", () => { gen = null; tsView = "new"; paintTrips(); });
+}
+/* ---- API keys, once for the whole app. "Copy keys" puts both keys in a setup link on the clipboard; "Paste keys"
+   takes that link, the Kanto app's send-to-phone link, or raw keys (OpenAI sk-…, ElevenLabs sk_…). Moving keys
+   between Safari and an installed Home Screen app (separate storage on iPhone) is one copy + one paste. ---- */
+let tsKeys = false, keyMsg = "";
+const keyTail = k => k ? "••••"+k.slice(-4) : "";
+function parseKeys(txt){
+  txt = String(txt || "").trim(); const out = {};
+  const m = /#el=([A-Za-z0-9_-]+)/.exec(txt);
+  if (m) { try { const d = JSON.parse(unb64u(m[1])); if (typeof d.a === "string" && d.a) out.a = d.a; if (typeof d.k === "string" && d.k) out.k = d.k; if (d.v && typeof d.v === "object") out.v = d.v; } catch(e) {} }
+  const oa = txt.match(/sk-[A-Za-z0-9_-]{20,}/); if (oa && !out.a) out.a = oa[0];
+  const el = txt.match(/sk_[A-Za-z0-9]{20,}/); if (el && !out.k) out.k = el[0];
+  return out;
+}
+function applyKeys(d){
+  if (d.a) { aiKey = d.a; store.set("aikey", d.a); }
+  if (d.k) { elKey = d.k; store.set("elkey", d.k); elVoices = null; }
+  if (d.v) { elPref = Object.assign({}, elPref, d.v); store.set("elv", elPref); }
+  return !!(d.a || d.k);
+}
+function keysDone(d){ keyMsg = "✓ "+t(_("已保存：","Saved: "))+[d.a ? "OpenAI" : "", d.k ? "ElevenLabs" : ""].filter(Boolean).join(" + "); paintTrips(); try { paintBookings(); paintVoice(); } catch(e) {} }
+function keysHTML(){
+  const st = (n, k) => '<span class="kst'+(k?" on":"")+'">'+n+' '+(k ? "✓ "+keyTail(k) : "✗ "+t(_("未设置","not set")))+'</span>';
+  let h = '<div class="tkeys"><button class="tkhead" id="tkToggle" aria-expanded="'+tsKeys+'"><b>🔑 '+t(_("API Key（全App共用）","API keys (whole app)"))+'</b>'+st("OpenAI", aiKey)+st("ElevenLabs", elKey)+'</button>';
+  if (tsKeys) {
+    h += '<div class="tkbody"><p class="tsnote">'+t(_("只要输入一次，所有行程、预订、记账和语音翻译都会自动使用。换到另一个App（例如主屏幕App、慢游旧时光App）：在这里点「复制Key」，到那边点「粘贴Key」。","Enter once and every trip, bookings, expenses and the voice translator use them. To move them to another app (the Home Screen app, the Kanto app): tap Copy keys here, then Paste keys there."))+'</p>';
+    h += '<div class="tsbtns"><button id="tkPaste" class="primary">📋 '+t(_("粘贴Key","Paste keys"))+'</button>'+(aiKey || elKey ? '<button id="tkCopy">📤 '+t(_("复制Key","Copy keys"))+'</button>' : '')+'</div>';
+    h += '<label class="tkin">'+t(_("或手动输入／粘贴（OpenAI、ElevenLabs Key或设置链接都可以）","Or type / paste here (OpenAI key, ElevenLabs key or a setup link)"))+'<textarea id="tkText" rows="2" autocomplete="off" spellcheck="false" placeholder="sk-…  /  sk_…"></textarea></label><div class="tsbtns"><button id="tkSave">'+t(_("保存","Save"))+'</button></div>';
+    if (keyMsg) h += '<p class="tsmsg">'+esc(keyMsg)+'</p>';
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+function wireKeys(box){
+  const on = (id, f) => { const el = box.querySelector("#"+id); if (el) el.onclick = f; };
+  on("tkToggle", () => { tsKeys = !tsKeys; keyMsg = ""; paintTrips(); });
+  on("tkCopy", async () => { try { await navigator.clipboard.writeText(setupLink()); keyMsg = "✓ "+t(_("已复制。到另一个App点「粘贴Key」。不要把它发给别人。","Copied. Tap Paste keys in the other app. Don't send it to anyone else.")); } catch(e) { keyMsg = t(_("复制失败。","Couldn't copy.")); } paintTrips(); });
+  on("tkPaste", async () => { let txt = ""; try { txt = await navigator.clipboard.readText(); } catch(e) { keyMsg = t(_("浏览器不让直接读取剪贴板：请长按下面的框，点「粘贴」，再点保存。","This browser won't read the clipboard directly: long-press the box below, tap Paste, then Save.")); paintTrips(); return; }
+    const d = parseKeys(txt); if (applyKeys(d)) keysDone(d); else { keyMsg = t(_("剪贴板里没有找到Key。","No key found on the clipboard.")); paintTrips(); } });
+  on("tkSave", () => { const d = parseKeys($("#tkText").value); if (applyKeys(d)) keysDone(d); else { keyMsg = t(_("没认出Key：OpenAI以 sk- 开头，ElevenLabs以 sk_ 开头。","Not recognised: OpenAI keys start with sk-, ElevenLabs keys with sk_.")); paintTrips(); } });
 }
 function readForm(){
   const v = id => { const el = $("#"+id); return el ? el.value : null; }, I = tsDraft; if (!I || !$("#gDest")) return;
