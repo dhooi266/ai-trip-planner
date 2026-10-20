@@ -2443,12 +2443,23 @@ function accountHTML(){
   h += use(n.trips, L.trips, _("今日新行程","New trips today"))+use(n.redos, L.redos, _("重做","Redos"))+use(n.scans, L.scans, _("识别","Scans"))+'</div><div class="tkbody">';
   h += '<p class="tsnote">'+t(_("行程、勾选、预订和记账都保存在你的账户里，用任何手机或电脑登录都能看到。AI Key由服务器提供，不用自己输入。","Your trips, ticks, bookings and expenses are saved to your account, so they appear on any phone or computer you log in on. AI keys come from the server; nothing to enter."))+'</p>';
   h += '<div class="tsbtns" style="flex-wrap:wrap;justify-content:flex-start"><button id="acPw">🔒 '+t(_("改密码","Change password"))+'</button>'+(TP.admin ? '<button id="acAdmin">⚙ '+t(_("管理后台","Admin"))+'</button>' : '')+'<button id="acOut">↩ '+t(_("登出","Log out"))+'</button></div>';
+  /* admins can put the AI keys on the server from here (used by every account; never stored on the phone) */
+  if (TP.admin) h += '<label class="tkin">🔑 '+t(_("服务器上的API Key（所有用户共用）","API keys on the server (used by every account)"))+
+    '<span style="display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 4px"><span class="kst'+(TP.openai?" on":"")+'">OpenAI '+(TP.openai?"✓":"✗ "+t(_("未设置","not set")))+'</span><span class="kst'+(TP.eleven?" on":"")+'">ElevenLabs '+(TP.eleven?"✓":"✗ "+t(_("未设置","not set")))+'</span></span>'+
+    '<textarea id="acKeys" rows="2" autocomplete="off" spellcheck="false" placeholder="'+t(_("粘贴 ElevenLabs Key（sk_…）或 OpenAI Key（sk-…）","Paste the ElevenLabs key (sk_…) or OpenAI key (sk-…)"))+'"></textarea></label><div class="tsbtns"><button id="acKeySave">'+t(_("保存到服务器","Save to server"))+'</button></div>';
   if (acctMsg) h += '<p class="tsmsg">'+esc(acctMsg)+'</p>';
   return h + '</div></div>';
 }
 function wireAccount(box){
   const on = (id, f) => { const el = box.querySelector("#"+id); if (el) el.onclick = f; };
   on("acAdmin", () => { location.href = "/admin"; });
+  on("acKeySave", async () => {
+    const d = parseKeys($("#acKeys").value), b = {}; if (d.a) b.openai = d.a; if (d.k) b.eleven = d.k;
+    if (!b.openai && !b.eleven) { acctMsg = t(_("没认出Key：ElevenLabs以 sk_ 开头，OpenAI以 sk- 开头。","Not recognised: ElevenLabs keys start with sk_, OpenAI keys with sk-.")); paintTrips(); return; }
+    try { const r = await fetch("/api/admin/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)});
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error?.message || "HTTP "+r.status);
+      acctMsg = "✓ "+t(_("已保存到服务器，正在重新载入…","Saved on the server, reloading…")); paintTrips(); setTimeout(() => location.reload(), 900);
+    } catch(e) { acctMsg = t(_("保存失败：","Couldn't save: "))+e.message; paintTrips(); } });
   on("acPw", async () => {
     const old = prompt(t(_("当前密码","Current password"))); if (!old) return;
     const nw = prompt(t(_("新密码（至少8位）","New password (at least 8 characters)"))); if (!nw) return;
