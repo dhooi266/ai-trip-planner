@@ -1,0 +1,18 @@
+{
+  "name": "AI Trip Planner · AI行程规划",
+  "short_name": "AI行程",
+  "description": "Type any destination and AI plans a full day-by-day trip: sights, route maps, food, stays, budget, checklist and a local-language translator.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0D1426",
+  "theme_color": "#0D1426",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "img/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "img/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
