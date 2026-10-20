@@ -64,6 +64,7 @@ Same `index.html`, two hosts: GitHub Pages = static, keys in the browser; Railwa
   `X-TP-Kind: redo`. 429 = limit reached (shown to the user, not retried).
 - Client: `TP` set → `OAI`/`EL` point at the relay, `aiKey`/`elKey` = "server", My trips shows the account card
   (`accountHTML`: today's usage, change password, admin, log out) instead of the keys panel.
+- Voices: the admin's voice picks (voice settings, or auto-pushed once from the admin's phone) are saved as `SETTINGS.voices` and sent as `TP.voices` = every account's default (`elVoiceFor`). Normal users see no key / voice setup at all (`TPK` replaces key errors).
 - `/admin` (admins): settings (invite code, limits, OpenAI / ElevenLabs keys), users (usage, disable, admin,
   reset password → shown once, delete). Deploy: `railway up --detach` from this folder (PowerShell).
 
