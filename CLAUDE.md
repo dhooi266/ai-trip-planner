@@ -45,6 +45,25 @@ regenerates one day with an optional change request.
 Everything else (bookings import, receipts/expenses, voice translator, PWA, install bar) works as in
 `../kanto-trip-app/CLAUDE.md`, but for the active trip.
 
+## Server mode (Railway, `server.js`, no npm dependencies)
+Same `index.html`, two hosts: GitHub Pages = static, keys in the browser; Railway = accounts + keys on the server.
+- Accounts: `/register` needs the invite code (`SETTINGS.invite`, seeded from `INVITE_CODE`); `/login` email +
+  password (scrypt); cookie `tp_s` = `uid.exp.hashTail.hmac` (a password change logs that user out everywhere).
+  First admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME`. Data in `DATA_DIR` (volume `/data`).
+- Sync: the server inlines `window.__TP = {uid, name, email, admin, rev, state, openai, eleven}` into index.html.
+  The bootstrap at the top of the script writes `state` into localStorage before anything reads it (skipped when
+  the device already has a newer `tripai:__rev`, e.g. an old cached page), then patches `Storage.prototype.setItem /
+  removeItem` so every synced `tripai:` key is queued in `tripai:__pending` and POSTed to `/api/state`
+  (debounced; `tpFlush()` before reloads). `DEVICE_KEYS` never sync. A different user on the device clears it.
+- AI relay: `/api/openai/*`, `/api/eleven/*` add the key (admin page `settings.json`, else env). Normal users may
+  only send the app's own Responses calls (schema names trip_outline, trip_day, trip_extras, bookings, receipts;
+  models gpt-5.4-mini / gpt-5.4); daily limits per user (Malaysia day) in `usage.json`; redo calls send
+  `X-TP-Kind: redo`. 429 = limit reached (shown to the user, not retried).
+- Client: `TP` set → `OAI`/`EL` point at the relay, `aiKey`/`elKey` = "server", My trips shows the account card
+  (`accountHTML`: today's usage, change password, admin, log out) instead of the keys panel.
+- `/admin` (admins): settings (invite code, limits, OpenAI / ElevenLabs keys), users (usage, disable, admin,
+  reset password → shown once, delete). Deploy: `railway up --detach` from this folder (PowerShell).
+
 ## Run / host
 `node .serve.js` → http://localhost:3031 (or the `trip-planner` entry in the parent `.claude/launch.json`).
 Static hosting (GitHub Pages) works as is. Never commit API keys; trips stay in each browser.
