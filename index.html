@@ -1708,7 +1708,7 @@ async function playBuf(ab){
   try { unlockAudio(); const buf = await actx.decodeAudioData(ab.slice(0)); const s = actx.createBufferSource(); s.buffer = buf; s.connect(actx.destination); await new Promise(res => { s.onended = res; s.start(); setTimeout(res, 30000); }); }
   catch(e) { throw new Error("autoplay"); }
 }
-const elVoiceFor = l => elPref[l] || (elVoices && elVoices[0] && elVoices[0].voice_id) || EL_DEFAULT_VOICE;
+const elVoiceFor = l => elPref[l] || (TP && TP.voices && TP.voices[l]) || (elVoices && elVoices[0] && elVoices[0].voice_id) || EL_DEFAULT_VOICE;
 async function elSpeak(text, l, queue){
   if (!elKey) { say(text, l===TLC ? TLB : l==="zh" ? "zh-CN" : "en-US", queue); return; }
   let last = "";
@@ -1843,20 +1843,20 @@ function voiceInner(){
   h += '<div class="vset"><span>'+(elKey?"🟢 ElevenLabs":"⚪ "+t(_("手机自带语音","Built-in phone voice")))+'</span>'+(vlog.length?'<button id="vClear">'+t(_("清空","Clear"))+'</button>':'')+'<button id="vSetBtn">⚙ '+t(_("设置","Settings"))+'</button></div>';
   if (vShowSet) {
     if (TP && !onServer(elKey) && !TP.admin) h += '<div class="vform"><p class="vhint">🎙 '+t(_("AI真人语音还没开通，暂时使用手机自带语音。","The natural AI voice isn't switched on yet, so your phone's built-in voice is used for now."))+'</p>';
-    else h += onServer(elKey) ? '<div class="vform"><p class="vhint">'+(TP && !TP.admin ? '🎙 '+t(_("AI真人语音已开通，不用任何设置。","The natural AI voice is on; nothing to set up.")) : '🔑 '+t(_("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here.")))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
-    if (elKey) {
+    else h += onServer(elKey) ? '<div class="vform"><p class="vhint">'+(TP && !TP.admin ? '🎙 '+t(_("AI真人语音已开通，不用任何设置。","The natural AI voice is on; nothing to set up.")) : '✅ '+t(TP ? _("AI真人语音已开通，所有用户自动使用。你在下面选的声音也是所有用户的默认声音。","The natural AI voice is on for every account. The voices you pick below are everyone's default.") : _("ElevenLabs Key保存在服务器上，不用在这里输入。","The ElevenLabs key is kept on the server; nothing to enter here.")))+'</p>' : '<div class="vform"><label>ElevenLabs API key<input id="elKeyIn" type="password" autocomplete="off" spellcheck="false" placeholder="'+(elKey?"••••••••"+esc(elKey.slice(-4)):"sk_…")+'"></label><div class="vrow"><button id="elSave">'+t(_("保存","Save"))+'</button>'+(elKey?'<button id="elDel">'+t(_("删除key","Remove key"))+'</button>':'')+'</div>';
+    if (elKey && !(TP && !TP.admin)) {
       if (!elVoices) h += '<p class="vhint">'+t(_("正在读取你的声音列表…","Loading your voices…"))+'</p>';
       else {
         const VLAB = {[TLC]:t(_(TLZ+"声音",TLE+" voice")), zh:t(_("中文声音","Chinese voice")), en:t(_("英文声音","English voice"))};
         const langs = [TLC].concat(vLang==="both" ? ["zh","en"] : [vLang]).map(l => [l, VLAB[l]]);
         if (!elVoices.length) {
           const c = elVoiceErr && elVoiceErr.code;
-          h += '<p class="vwarn">⚠ '+(TP && !TP.admin && c !== "network" ? t(_("暂时读不到声音列表，会用默认声音。","The voice list isn't available right now; the default voice is used.")) : c==="missing_permissions" ? t(_("这个key没有「Voices 读取」权限，所以读不到声音列表。到 ElevenLabs → Developers → API Keys → 编辑这个key，把 Voices 设为 Read，然后点「重新读取」。","This key has no Voices read permission, so the list can't load. In ElevenLabs → Developers → API Keys, edit the key, set Voices to Read, then tap Reload.")) :
+          h += '<p class="vwarn">⚠ '+(TP && !TP.admin && c !== "network" ? t(_("暂时读不到声音列表，会用默认声音。","The voice list isn't available right now; the default voice is used.")) : c==="missing_permissions" && TP ? t(_("读不到声音列表也没关系：直接在下面贴声音ID，所有用户都会用这些声音。（想显示列表：ElevenLabs → API Keys 给它开 Voices: Read。）","No voice list, and that's fine: paste voice IDs below and every account uses them. (To show the list, give it Voices: Read under ElevenLabs → API Keys.)")) : c==="missing_permissions" ? t(_("这个key没有「Voices 读取」权限，所以读不到声音列表。到 ElevenLabs → Developers → API Keys → 编辑这个key，把 Voices 设为 Read，然后点「重新读取」。","This key has no Voices read permission, so the list can't load. In ElevenLabs → Developers → API Keys, edit the key, set Voices to Read, then tap Reload.")) :
             c==="invalid_api_key" ? t(_("ElevenLabs说这个key无效，请重新复制整串key再保存。","ElevenLabs says this key is invalid; copy the whole key again and save.")) :
             c==="network" ? t(_("连不上ElevenLabs，请检查网络。","Can't reach ElevenLabs; check the connection.")) :
             t(_("读取声音列表失败","Couldn't load the voice list"))+(elVoiceErr ? " ("+elVoiceErr.status+(elVoiceErr.msg?": "+esc(elVoiceErr.msg):"")+")" : ""))+'</p><div class="vrow"><button id="elReload">🔄 '+t(_("重新读取","Reload"))+'</button></div>';
           h += '<p class="vhint">'+t(_("也可以直接贴上声音ID：在 ElevenLabs 的 My Voices 里点声音 → ⋯ → Copy voice ID。","Or paste a voice ID directly: in ElevenLabs My Voices, tap a voice → ⋯ → Copy voice ID."))+'</p>';
-          langs.forEach(([l,lab]) => h += '<label>'+lab+' ID<div class="vrow"><input data-vid="'+l+'" value="'+esc(elPref[l]||"")+'" placeholder="'+t(_("留空 = 默认声音","blank = default voice"))+'" autocomplete="off" spellcheck="false"><button data-vt="'+l+'">🔊</button></div></label>');
+          langs.forEach(([l,lab]) => h += '<label>'+lab+' ID<div class="vrow"><input data-vid="'+l+'" value="'+esc(elPref[l]||(TP && TP.voices && TP.voices[l])||"")+'" placeholder="'+t(_("留空 = 默认声音","blank = default voice"))+'" autocomplete="off" spellcheck="false"><button data-vt="'+l+'">🔊</button></div></label>');
         } else {
           langs.forEach(([l,lab]) => h += '<label>'+lab+'<div class="vrow"><select data-vl="'+l+'">'+elVoices.map(v => '<option value="'+v.voice_id+'"'+(elVoiceFor(l)===v.voice_id?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select><button data-vt="'+l+'">🔊</button></div></label>');
           h += '<p class="vhint">'+t(_("列表只显示 My Voices 里的声音；在 Voice Library 找"+TLZ+"/中文声音，点 Add to My Voices 后回来点🔄。","Only voices in My Voices are listed; add "+TLE+"/Chinese voices from the Voice Library, then reload."))+' <button id="elReload" class="vlink">🔄</button></p>';
@@ -1886,8 +1886,11 @@ function paintVoice(){
       return; }
     elKey = k; store.set("elkey", k); elVoices = null; vMsg = ""; elLoadVoices(); paintVoice(); };
   const dl = $("#elDel"); if (dl) dl.onclick = () => { elKey = ""; elVoices = null; try { localStorage.removeItem(skey("elkey")); } catch(e) {} paintVoice(); };
-  box.querySelectorAll("select[data-vl]").forEach(s => s.onchange = () => { elPref[s.dataset.vl] = s.value; store.set("elv", elPref); });
-  box.querySelectorAll("input[data-vid]").forEach(i => i.onchange = () => { const v = i.value.trim(); if (v) elPref[i.dataset.vid] = v; else delete elPref[i.dataset.vid]; store.set("elv", elPref); });
+  /* admin on the Railway version: the choice also becomes every account's default voice */
+  const vShare = (l, v) => { if (!(TP && TP.admin && v)) return; TP.voices = Object.assign({}, TP.voices, {[l]:v});
+    fetch("/api/admin/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({voices:{[l]:v}})}).then(r => { vMsg = r.ok ? "✓ "+t(_("已设为所有用户的默认声音","Set as every account's default voice")) : t(_("保存失败","Couldn't save")); paintVoice(); }).catch(() => {}); };
+  box.querySelectorAll("select[data-vl]").forEach(s => s.onchange = () => { elPref[s.dataset.vl] = s.value; store.set("elv", elPref); vShare(s.dataset.vl, s.value); });
+  box.querySelectorAll("input[data-vid]").forEach(i => i.onchange = () => { const v = i.value.trim(); if (v) elPref[i.dataset.vid] = v; else delete elPref[i.dataset.vid]; store.set("elv", elPref); vShare(i.dataset.vid, v); });
   box.querySelectorAll("button[data-vt]").forEach(b => b.onclick = () => {
     unlockAudio(); const l = b.dataset.vt, inp = box.querySelector('input[data-vid="'+l+'"]');
     if (inp) inp.onchange();
@@ -2769,6 +2772,9 @@ document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => {
 
 renderAll();
 importSetup();
+/* admin: voices already picked on this phone become the default for every account (once, while the server has none) */
+if (TP && TP.admin && onServer(elKey) && !Object.keys(TP.voices || {}).length) { const v = {}; for (const l in elPref) if (/^[A-Za-z0-9]{10,40}$/.test(elPref[l])) v[l] = elPref[l];
+  if (Object.keys(v).length) fetch("/api/admin/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({voices:v})}).then(r => { if (r.ok) TP.voices = v; }).catch(() => {}); }
 importBookings();
 addEventListener("hashchange", importBookings);
 importTripLink();

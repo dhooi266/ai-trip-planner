@@ -148,7 +148,7 @@ load();
 async function appPage(res, u){
   let html = await fsp.readFile(path.join(ROOT, "index.html"), "utf8");
   const st = readJSON(statePath(u.id), {rev:0, items:{}});
-  const TP = {uid:u.id, name:u.name, email:u.email, admin:u.admin, rev:st.rev, state:st.items, openai:!!OPENAI(), eleven:!!ELEVEN()};
+  const TP = {uid:u.id, name:u.name, email:u.email, admin:u.admin, rev:st.rev, state:st.items, openai:!!OPENAI(), eleven:!!ELEVEN(), voices:SETTINGS.voices || {}};
   html = html.replace("</head>", "<script>window.__TP=" + JSON.stringify(TP).replace(/</g, "\\u003c") + "</script>\n</head>");
   res.writeHead(200, {"Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-cache"}); res.end(html);
 }
@@ -255,6 +255,7 @@ http.createServer(async (req, res) => {
         if (b.limits) for (const k of Object.keys(DEF_LIMITS)) if (Number.isFinite(+b.limits[k]) && +b.limits[k] >= 0) SETTINGS.limits[k] = Math.round(+b.limits[k]);
         if (typeof b.openai === "string" && b.openai.trim()) SETTINGS.openai = b.openai.trim();
         if (typeof b.eleven === "string" && b.eleven.trim()) SETTINGS.eleven = b.eleven.trim();
+        if (b.voices && typeof b.voices === "object") { const v = {}; for (const k of Object.keys(b.voices).slice(0, 12)) if (/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(k) && /^[A-Za-z0-9]{10,40}$/.test(String(b.voices[k]))) v[k] = String(b.voices[k]); SETTINGS.voices = Object.assign({}, SETTINGS.voices, v); }
         await saveSettings(); return json(res, 200, {ok:true});
       }
       if (p === "/api/admin/user" && req.method === "POST") {
